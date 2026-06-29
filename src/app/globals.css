@@ -1,26 +1,150 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500;600&display=swap');
+
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --color-grafito: #2B2D2F;
+  --color-negro:   #1A1B1D;
+  --color-cobre:   #C38A5A;
+  --color-hueso:   #F5F2ED;
+  --color-piedra:  #B8AEA3;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --color-grafito: #2B2D2F;
+  --color-negro:   #1A1B1D;
+  --color-cobre:   #C38A5A;
+  --color-hueso:   #F5F2ED;
+  --color-piedra:  #B8AEA3;
+  --font-sans: 'Inter', sans-serif;
+  --font-mono: 'Roboto Mono', monospace;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  font-family: 'Inter', sans-serif;
+  font-size: 16px;
+  background-color: #F5F2ED;
+  color: #2B2D2F;
+  -webkit-tap-highlight-color: transparent;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  min-height: 100dvh;
+}
+
+input, select, textarea {
+  font-family: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid #C38A5A;
+  outline-offset: 2px;
+}
+
+input[type="checkbox"],
+input[type="radio"] {
+  width: 1rem;
+  height: 1rem;
+  cursor: pointer;
+  accent-color: #C38A5A;
+}
+
+/* ── Eyebrow label ─────────────────────────────────────── */
+.eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: #C38A5A;
+  line-height: 1;
+}
+
+/* ── Ensure section-head clips to rounded corners ──────── */
+.doc-section {
+  overflow: hidden;
+}
+
+/* ── Section heading — copper banner (bleeds out of doc-section padding) */
+.section-head {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,0.9);
+  background: #7B4A28;
+  /* bleed out of parent's px-4 py-3 */
+  margin: -0.75rem -1rem 0.75rem;
+  padding: 0.5rem 1rem;
+}
+.section-head::before {
+  content: '| ';
+}
+
+/* ── Field input base ───────────────────────────────────── */
+.field-input {
+  width: 100%;
+  border: 1px solid #2A2A2A;
+  border-radius: 0.375rem;
+  padding: 0.5rem 0.75rem;
+  background: #111;
+  font-size: 0.8125rem;
+  color: #F5F2ED;
+  transition: border-color 0.15s;
+  line-height: 1.4;
+}
+.field-input:focus {
+  border-color: #C38A5A;
+  outline: none;
+}
+.field-input:disabled,
+.field-input.is-locked {
+  opacity: 0.5;
+  pointer-events: none;
+  background: #0A0A0A;
+}
+
+/* ── Print ──────────────────────────────────────────────── */
+.print-page {
+  background: #fff;
+  color: #2B2D2F;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+@media screen {
+  .print-shell {
+    background: #F5F2ED;
+    min-height: 100dvh;
+    padding: 24px 0;
+  }
+  .print-page {
+    width: 210mm;
+    max-width: calc(100% - 24px);
+    margin: 0 auto;
+    padding: 18mm;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.10);
+    border-radius: 2px;
+  }
+}
+
+/* Fuerza la impresión de fondos de color (portada grafito del entregable). */
+.print-color {
+  -webkit-print-color-adjust: exact;
+  print-color-adjust: exact;
+}
+
+@media print {
+  @page { size: A4; margin: 16mm; }
+  .no-print { display: none !important; }
+  body { background: white; color: black; font-size: 10pt; }
+  .print-shell { background: white; padding: 0; }
+  .print-page { width: auto; max-width: none; margin: 0; padding: 0; box-shadow: none; }
+  /* La portada conserva su lienzo grafito a sangre completa. */
+  .print-cover { padding: 22mm 18mm !important; min-height: calc(297mm - 32mm); }
+  table, tr, .doc-section { break-inside: avoid; }
+  h1, h2, h3 { break-after: avoid; }
+  a { text-decoration: none; color: inherit; }
 }

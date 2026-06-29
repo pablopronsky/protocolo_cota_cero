@@ -1,0 +1,96 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    function signedIn()  { return request.auth != null; }
+    function role()      { return request.auth.token.role; }
+    function isAdmin()   { return role() == 'admin'; }
+    function isTecnico() { return role() == 'tecnico'; }
+    function locked(d)   { return d.status == 'completo' || d.status == 'firmado'; }
+
+    // #7 — Valida que todos los valores del mapa docStatus estén en el enum.
+    // Los 6 docTypes siempre existen (initEmptyDocs los inicializa al crear el proyecto).
+    function validDocStatusMap(ds) {
+      return ds.VT in ['vacio','en_progreso','completo','firmado']
+          && ds.EP in ['vacio','en_progreso','completo','firmado']
+          && ds.OT in ['vacio','en_progreso','completo','firmado']
+          && ds.RF in ['vacio','en_progreso','completo','firmado']
+          && ds.AC in ['vacio','en_progreso','completo','firmado']
+          && ds.FM in ['vacio','en_progreso','completo','firmado'];
+    }
+
+    // #7 — El técnico solo puede avanzar el estado del proyecto, nunca
+    // retroceder ni saltear pasos (borrador → en_curso → entregado).
+    function validProjectStatusTransition(current, next) {
+      return (current == 'borrador'  && next in ['borrador', 'en_curso'])
+          || (current == 'en_curso'  && next in ['en_curso', 'entregado'])
+          || (current == 'entregado' && next == 'entregado');
+    }
+
+    // #7 — No permite marcar el proyecto como 'entregado' si el AC no está
+    // firmado. Costo: 1 lectura extra por escritura; aceptable para uso interno.
+    function acEstaFirmado(code) {
+      return get(/databases/$(db)/documents/projects/$(code)/documents/AC)
+               .data.status == 'firmado';
+    }
+
+    match /users/{uid} {
+      allow read:  if signedIn();
+      allow write: if isAdmin();
+    }
+
+    match /counters/{year} {
+      // Solo escribe el Admin SDK (creación/duplicación de proyectos).
+      allow read:  if signedIn();
+      allow write: if false;
+    }
+
+    match /config/{document} {
+      allow read:  if signedIn();   // los forms lo leen para sembrar
+      allow write: if isAdmin();    // solo admin edita el protocolo
+    }
+
+    match /projects/{code} {
+      allow read:   if signedIn();
+      allow create: if isAdmin();
+      allow update: if isAdmin()
+                    || (isTecnico()
+                          // Solo puede tocar estos cuatro campos.
+                          && request.resource.data.diff(resource.data)
+                              .affectedKeys().hasOnly(['docStatus','status','updatedAt','updatedBy'])
+                          // status del proyecto debe ser un valor del enum.
+                          && request.resource.data.status in ['borrador','en_curso','entregado']
+                          // Sin saltos ni retrocesos en el flujo.
+                          && validProjectStatusTransition(
+                               resource.data.status,
+                               request.resource.data.status)
+                          // Cada slot de docStatus debe tener un valor del enum.
+                          && validDocStatusMap(request.resource.data.docStatus)
+                          // No puede marcar entregado si el AC no está firmado.
+                          && (request.resource.data.status != 'entregado'
+                               || acEstaFirmado(code)));
+      allow delete: if isAdmin();
+
+      match /documents/{docType} {
+        allow read: if signedIn();
+        // Admin: acceso total a los 6 documentos.
+        // Técnico: solo VT, EP, OT, RF.
+        // (#5 reglas) AC y FM son exclusivos del admin, coherente con el
+        //             guard de UI en ACForm (Batch 3).
+        allow write: if isAdmin()
+                     || (isTecnico()
+                          && docType in ['VT','EP','OT','RF']
+                          && (resource == null || !locked(resource.data))
+                          // #7 — status del documento también debe ser del enum.
+                          && request.resource.data.status
+                               in ['vacio','en_progreso','completo','firmado']);
+      }
+
+      match /revisions/{rev} {
+        allow read:           if signedIn();
+        allow create:         if signedIn();
+        allow update, delete: if false;
+      }
+    }
+  }
+}
