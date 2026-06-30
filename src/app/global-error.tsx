@@ -12,7 +12,7 @@ export default function GlobalError({
       <body style={{
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         minHeight: '100dvh', backgroundColor: '#F5F2ED',
-        fontFamily: 'sans-serif', margin: 0,
+        fontFamily: 'Roboto, sans-serif', margin: 0,
       }}>
         <div style={{ textAlign: 'center', padding: '2rem', maxWidth: 400 }}>
           <div style={{ width: 40, height: 2, background: '#C38A5A', margin: '0 auto 1.5rem' }} />

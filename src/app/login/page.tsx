@@ -72,7 +72,7 @@ const INPUT: React.CSSProperties = {
   fontSize: 13,
   outline: 'none',
   boxSizing: 'border-box',
-  fontFamily: 'Montserrat, Arial, sans-serif',
+  fontFamily: 'Roboto, Arial, sans-serif',
   letterSpacing: '0.02em',
   transition: 'border-color 0.15s',
 };
@@ -84,7 +84,7 @@ const LABEL: React.CSSProperties = {
   letterSpacing: '0.28em',
   color: '#C38A5A',
   marginBottom: 8,
-  fontFamily: 'Montserrat, Arial, sans-serif',
+  fontFamily: 'Roboto, Arial, sans-serif',
 };
 const ICON_WRAP: React.CSSProperties = {
   position: 'absolute', left: 15, top: '50%',
@@ -172,7 +172,7 @@ export default function LoginPage() {
       <div style={{
         display: 'flex', height: '100dvh', width: '100%',
         backgroundColor: '#0C0C0C', overflow: 'hidden',
-        fontFamily: 'Montserrat, Arial, sans-serif',
+        fontFamily: 'Roboto, Arial, sans-serif',
       }}>
 
         {/* ══════════════════════════════════════════════════════
@@ -449,7 +449,7 @@ export default function LoginPage() {
                         width: '100%', fontWeight: 800, fontSize: 10,
                         textTransform: 'uppercase', letterSpacing: '0.26em',
                         border: 'none', borderRadius: 2, padding: '15px 0',
-                        fontFamily: 'Montserrat, Arial, sans-serif',
+                        fontFamily: 'Roboto, Arial, sans-serif',
                         cursor: 'pointer', transition: 'background 0.15s',
                         display: 'flex', alignItems: 'center',
                         justifyContent: 'center', gap: 10,
@@ -526,7 +526,7 @@ export default function LoginPage() {
                         width: '100%', fontWeight: 800, fontSize: 10,
                         textTransform: 'uppercase', letterSpacing: '0.26em',
                         border: 'none', borderRadius: 2, padding: '15px 0',
-                        fontFamily: 'Montserrat, Arial, sans-serif',
+                        fontFamily: 'Roboto, Arial, sans-serif',
                         cursor: 'pointer', transition: 'background 0.15s',
                         marginBottom: 10,
                       }}
@@ -544,7 +544,7 @@ export default function LoginPage() {
                         padding: '13px 0', color: 'rgba(245,242,237,0.38)',
                         fontSize: 10, fontWeight: 700,
                         textTransform: 'uppercase', letterSpacing: '0.22em',
-                        cursor: 'pointer', fontFamily: 'Montserrat, Arial, sans-serif',
+                        cursor: 'pointer', fontFamily: 'Roboto, Arial, sans-serif',
                         transition: 'border-color 0.15s, color 0.15s',
                       }}
                     >

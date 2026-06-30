@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Roboto+Mono:wght@400;500;600&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&family=Roboto+Mono:wght@400;500;600&display=swap');
 
 @import "tailwindcss";
 
@@ -16,12 +16,12 @@
   --color-cobre:   #C38A5A;
   --color-hueso:   #F5F2ED;
   --color-piedra:  #B8AEA3;
-  --font-sans: 'Inter', sans-serif;
+  --font-sans: 'Roboto', sans-serif;
   --font-mono: 'Roboto Mono', monospace;
 }
 
 html {
-  font-family: 'Inter', sans-serif;
+  font-family: 'Roboto', sans-serif;
   font-size: 16px;
   background-color: #F5F2ED;
   color: #2B2D2F;
