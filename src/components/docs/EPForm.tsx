@@ -6,8 +6,11 @@ import SaveIndicator from '@/components/SaveIndicator';
 import InheritedBanner from '@/components/InheritedBanner';
 import { useDoc } from '@/hooks/useDoc';
 import { setDocStatus, writeRevision } from '@/lib/repo/projects';
+import { sequencingError } from '@/lib/sequencing';
 import { buildLockedSnapshot, detectDrift, deriveInherited } from '@/lib/inheritance';
 import { useAuth } from '@/hooks/useAuth';
+import { useConfirm } from '@/hooks/useConfirm';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { Project, DocEP, AnyDoc, DocType } from '@/schemas';
 import { LIMPIEZA_SOPORTE, CONDICIONES_INICIAR } from '@/schemas';
 import { useProtocolTemplate } from '@/hooks/useProtocolTemplate';
@@ -28,6 +31,7 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
   const isLocked = ep?.status === 'completo' || ep?.status === 'firmado';
   const [locking, setLocking] = useState(false);
   const [lockErrors, setLockErrors] = useState<string[]>([]);
+  const { confirmOpen, confirmMessage, openConfirm, onConfirm, onCancel } = useConfirm();
   const { template, loading: tplLoading } = useProtocolTemplate();
   const seededRef = useRef(false);
 
@@ -91,9 +95,11 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
     if (values.requiereNivelacion && !values.metodoNivelacion) errs.push('Método de nivelación requerido');
     if (values.tratamientoHumedad && !values.barreraVapor) errs.push('Barrera de vapor requerida');
     if (values.requiereImprimacion && !values.productoImprimacion) errs.push('Producto de imprimación requerido');
+    const seqErr = sequencingError('EP', 'completo', project.docStatus, upstream);
+    if (seqErr) errs.push(seqErr);
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
-    if (!window.confirm('¿Marcar como completo? El documento quedará bloqueado.')) return;
+    if (!await openConfirm('¿Marcar como completo? El documento quedará bloqueado.')) return;
     cancelAutosave();
     setLocking(true);
     try {
@@ -101,8 +107,10 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
       await setDocStatus(projectCode, 'EP', 'completo', {
         ...values, lockedSnapshot: snapshot, lockedAt: Date.now(), lockedBy: user?.uid ?? '',
         version: (ep?.version ?? 0) + 1,
-      } as Partial<AnyDoc>, project.status);
+      } as Partial<AnyDoc>, project.status, { docStatus: project.docStatus, upstream });
       await writeRevision(projectCode, 'EP', 'completo', snapshot, (ep?.version ?? 0) + 1, user?.uid ?? '');
+    } catch (e) {
+      setLockErrors([e instanceof Error ? e.message : 'No se pudo bloquear el documento.']);
     } finally { setLocking(false); }
   }
 
@@ -113,6 +121,7 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
   const roFields = seed.readonly;
 
   return (
+    <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-mono text-[#B8AEA3] capitalize">{ep?.status ?? 'vacio'}</span>
@@ -294,5 +303,7 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
         </button>
       )}
     </form>
+      <ConfirmDialog open={confirmOpen} message={confirmMessage} onConfirm={onConfirm} onCancel={onCancel} />
+    </>
   );
 }

@@ -27,18 +27,27 @@ export interface Inherited<T> {
   overridden: boolean;
 }
 
+// ── Client ────────────────────────────────────────────────
+export interface Client {
+  id: string;
+  nombre: string;
+  contacto: string;
+  telefono: string;
+  email?: string;
+  dni_cuit?: string;
+  createdAt: Millis;
+  updatedAt: Millis;
+}
+
 // ── Project ───────────────────────────────────────────────
 export interface Project {
   code: ProjectCode;
   year: number;
   seq: number;
-  cliente: {
-    nombre: string;
-    contacto: string;
-    telefono: string;
-    email?: string;
-    dni_cuit?: string;
-  };
+  // clienteId apunta a la colección clients. clienteNombre es denormalizado
+  // para mostrar en listas y prints sin una lectura extra.
+  clienteId: string;
+  clienteNombre: string;
   domicilioObra: {
     calle: string;
     numero: string;

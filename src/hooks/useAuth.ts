@@ -29,7 +29,9 @@ export function useAuth(): AuthState {
         return;
       }
 
-      const tokenResult = await user.getIdTokenResult();
+      // forceRefresh:true garantiza que un cambio de rol (custom claim) se refleje
+      // en la próxima carga sin tener que cerrar sesión.
+      const tokenResult = await user.getIdTokenResult(true);
       const role = (tokenResult.claims.role as 'admin' | 'tecnico') ?? null;
 
       const db = getFirebaseDb();

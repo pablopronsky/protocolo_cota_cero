@@ -16,6 +16,8 @@ import {
 import { useUsers } from '@/hooks/useUsers';
 import { useProtocolTemplate } from '@/hooks/useProtocolTemplate';
 import { templateSeedFor } from '@/lib/protocolDefaults';
+import { useConfirm } from '@/hooks/useConfirm';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 
 interface Props {
   projectCode: string;
@@ -32,7 +34,7 @@ const EMPTY_VT: Partial<DocVT> = {
   estadoSoporte: '',
   materialSoporte: '',
   humedad: { medicionPct: 0, metodo: '', apto: false },
-  nivelacion: { desnivelMm: 0, apto: true },
+  nivelacion: { desnivelMm: 0, apto: false },
   encuentrosCriticos: [],
   condicionesEspacio: [],
   registroFotografico: [],
@@ -115,10 +117,12 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
   const isLocked = vt?.status === 'completo' || vt?.status === 'firmado';
   const [locking, setLocking] = useState(false);
   const [lockErrors, setLockErrors] = useState<string[]>([]);
+  const { confirmOpen, confirmMessage, openConfirm, onConfirm, onCancel } = useConfirm();
   const { template, loading: tplLoading } = useProtocolTemplate();
   const seededRef = useRef(false);
   // Preview local de fotos: Map<id, objectURL>. No se persiste en RHF ni Firestore.
   const [photoPreviews, setPhotoPreviews] = useState<Map<string, string>>(new Map());
+  const [photoError, setPhotoError] = useState<string | null>(null);
 
   const { register, control, watch, getValues, setValue, reset } = useForm<DocVT>({
     defaultValues: { ...(EMPTY_VT as DocVT), ...vt },
@@ -190,7 +194,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
     if (!values.dictamen) errs.push('Dictamen requerido');
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
-    if (!window.confirm('¿Marcar como completo? El documento quedará bloqueado.')) return;
+    if (!await openConfirm('¿Marcar como completo? El documento quedará bloqueado.')) return;
     cancelAutosave();
     setLocking(true);
     try {
@@ -204,8 +208,10 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
         lockedAt: Date.now(),
         lockedBy: user?.uid ?? '',
         version: (vt?.version ?? 0) + 1,
-      } as Partial<AnyDoc>, project.status);
+      } as Partial<AnyDoc>, project.status, { docStatus: project.docStatus, upstream });
       await writeRevision(projectCode, 'VT', 'completo', snapshot, (vt?.version ?? 0) + 1, user?.uid ?? '');
+    } catch (e) {
+      setLockErrors([e instanceof Error ? e.message : 'No se pudo bloquear el documento.']);
     } finally {
       setLocking(false);
     }
@@ -214,13 +220,18 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
   async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-    // lib/photos.ts escribe en Firestore; guardamos solo el blob para preview local.
-    const { id, localBlob } = await enqueuePhoto(projectCode, 'VT', file, user.uid);
-    setPhotoPreviews((prev) => new Map(prev).set(id, localBlob));
+    setPhotoError(null);
+    try {
+      // lib/photos.ts escribe en Firestore; guardamos solo el blob para preview local.
+      const { id, localBlob } = await enqueuePhoto(projectCode, 'VT', file, user.uid);
+      setPhotoPreviews((prev) => new Map(prev).set(id, localBlob));
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : 'No se pudo agregar la foto.');
+    }
   }
 
   async function removePhoto(id: string) {
-    if (!window.confirm('¿Eliminar esta foto?')) return;
+    if (!await openConfirm('¿Eliminar esta foto?')) return;
     const livePhotos = (liveDoc as import('@/schemas').DocVT | null)?.registroFotografico ?? [];
     const photo = livePhotos.find((p) => p.id === id);
     if (!photo) return;
@@ -238,6 +249,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
   const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3] mb-1.5';
 
   return (
+    <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       {/* Status bar */}
       <div className="flex items-center justify-between">
@@ -405,6 +417,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
             />
           </label>
         )}
+        {photoError && <p className="text-[12px] text-red-500 mt-1">{photoError}</p>}
         <div className="grid grid-cols-3 gap-2 mt-2">
           {((liveDoc as import('@/schemas').DocVT | null)?.registroFotografico ?? []).map((p) => (
             <PhotoThumb
@@ -458,5 +471,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
         </button>
       )}
     </form>
+      <ConfirmDialog open={confirmOpen} message={confirmMessage} onConfirm={onConfirm} onCancel={onCancel} />
+    </>
   );
 }

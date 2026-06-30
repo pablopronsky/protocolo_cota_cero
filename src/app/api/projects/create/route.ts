@@ -5,7 +5,7 @@ import { requireAdmin, HttpError } from '@/lib/auth/requireAuth';
 import { CreateProjectInput } from '@/schemas/inputs';
 import { buildCode } from '@/lib/ids';
 import { DOC_ORDER } from '@/schemas';
-import type { Project, DocType, DocStatus } from '@/schemas';
+import type { Project, Client, DocType, DocStatus } from '@/schemas';
 
 export async function POST(req: NextRequest) {
   try {
@@ -18,6 +18,27 @@ export async function POST(req: NextRequest) {
 
     let code: string;
 
+    // Resolver el cliente antes de la transacción para poder generar el ID.
+    // Si viene clienteId → verificar que existe.
+    // Si no → pre-generar la ref del nuevo cliente.
+    let clienteId: string;
+    let clienteNombre: string;
+
+    if (data.clienteId) {
+      const snap = await db.doc(`clients/${data.clienteId}`).get();
+      if (!snap.exists) {
+        return NextResponse.json({ error: 'Cliente no encontrado' }, { status: 404 });
+      }
+      const c = snap.data() as Client;
+      clienteId = data.clienteId;
+      clienteNombre = c.nombre;
+    } else {
+      // Pre-generar la ref; la creamos dentro de la transacción.
+      const newClientRef = db.collection('clients').doc();
+      clienteId = newClientRef.id;
+      clienteNombre = data.clienteNombre!;
+    }
+
     await db.runTransaction(async (tx) => {
       const counterSnap = await tx.get(counterRef);
       const lastSeq = (counterSnap.exists ? counterSnap.data()?.lastSeq : 0) ?? 0;
@@ -29,17 +50,27 @@ export async function POST(req: NextRequest) {
         DOC_ORDER.map((dt) => [dt, 'vacio' as DocStatus]),
       ) as Record<DocType, DocStatus>;
 
+      // Si el cliente es nuevo, crearlo dentro de la transacción.
+      if (!data.clienteId) {
+        const newClient: Client = {
+          id: clienteId,
+          nombre: data.clienteNombre!,
+          contacto: data.clienteContacto!,
+          telefono: data.clienteTelefono!,
+          ...(data.clienteEmail   && { email:    data.clienteEmail }),
+          ...(data.clienteDniCuit && { dni_cuit: data.clienteDniCuit }),
+          createdAt: now,
+          updatedAt: now,
+        };
+        tx.create(db.doc(`clients/${clienteId}`), newClient);
+      }
+
       const project: Project = {
         code,
         year,
         seq: nextSeq,
-        cliente: {
-          nombre:   data.clienteNombre,
-          contacto: data.clienteContacto,
-          telefono: data.clienteTelefono,
-          email:    data.clienteEmail,
-          dni_cuit: data.clienteDniCuit,
-        },
+        clienteId,
+        clienteNombre,
         domicilioObra: {
           calle:      data.calle,
           numero:     data.numero,
@@ -56,7 +87,6 @@ export async function POST(req: NextRequest) {
         presupuestoRef:       data.presupuestoRef,
         status:               'borrador',
         docStatus,
-        // Identidad derivada del token verificado, no del body.
         responsableComercial: user.uid,
         responsableTecnico:   data.responsableTecnico ?? '',
         createdAt:   now,
@@ -65,12 +95,9 @@ export async function POST(req: NextRequest) {
         updatedBy:   user.uid,
       };
 
-      // create() falla si el código ya existe: evita pisar un legajo por
-      // desincronización del contador.
       tx.create(db.doc(`projects/${code}`), project);
       tx.set(counterRef, { lastSeq: nextSeq }, { merge: true });
 
-      // Inicializar los 6 documentos vacíos
       for (const docType of DOC_ORDER) {
         tx.set(db.doc(`projects/${code}/documents/${docType}`), {
           docType,

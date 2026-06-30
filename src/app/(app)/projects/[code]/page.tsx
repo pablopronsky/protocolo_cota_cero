@@ -6,6 +6,8 @@ import { useRouter } from 'next/navigation';
 import { useProject } from '@/hooks/useProject';
 import { useAuth } from '@/hooks/useAuth';
 import { archiveProject, unarchiveProject } from '@/lib/repo/projects';
+import { useConfirm } from '@/hooks/useConfirm';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { DocType, DocStatus } from '@/schemas';
 import { DOC_ORDER, DOC_LABELS } from '@/schemas';
 
@@ -65,6 +67,7 @@ export default function ProjectOverviewPage({
   const { project, docs, loading } = useProject(code);
   const { role, user } = useAuth();
   const router = useRouter();
+  const { confirmOpen, confirmMessage, openConfirm, onConfirm, onCancel } = useConfirm();
 
   if (loading) {
     return (
@@ -87,7 +90,7 @@ export default function ProjectOverviewPage({
     if (isArchived) {
       await unarchiveProject(project.code);
     } else {
-      if (!confirm('¿Archivar este proyecto? Quedará en solo lectura.')) return;
+      if (!await openConfirm('¿Archivar este proyecto? Quedará en solo lectura.')) return;
       await archiveProject(project.code);
     }
   }
@@ -113,6 +116,7 @@ export default function ProjectOverviewPage({
   }
 
   return (
+    <>
     <div className="space-y-6">
       {/* Back link */}
       <Link
@@ -135,8 +139,14 @@ export default function ProjectOverviewPage({
             </span>
           )}
         </div>
-        <h1 className="text-[22px] font-bold text-[#2B2D2F] leading-tight tracking-tight">
-          {project.cliente.nombre}
+        <h1 className="text-[22px] font-bold leading-tight tracking-tight">
+          <Link
+            href={`/clients/${encodeURIComponent(project.clienteId)}`}
+            className="text-[#2B2D2F] hover:text-[#C38A5A] transition-colors"
+            title="Ver ficha del cliente"
+          >
+            {project.clienteNombre}
+          </Link>
         </h1>
         <p className="text-[13px] text-[#B8AEA3] mt-1.5 leading-snug">
           {project.domicilioObra.calle} {project.domicilioObra.numero}
@@ -234,14 +244,20 @@ export default function ProjectOverviewPage({
       </div>
 
       {/* Entregable cliente PDF */}
-      <Link
-        href={`/print/${project.code}/entregable`}
-        target="_blank"
-        className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] rounded-md py-3 text-white transition-colors"
-        style={{ background: '#C38A5A' }}
-      >
-        Entregable cliente · PDF
-      </Link>
+      {project.docStatus?.AC === 'firmado' ? (
+        <Link
+          href={`/print/${project.code}/entregable`}
+          target="_blank"
+          className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] rounded-md py-3 text-white transition-colors"
+          style={{ background: '#C38A5A' }}
+        >
+          Entregable cliente · PDF
+        </Link>
+      ) : (
+        <div className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] rounded-md py-3 text-[#B8AEA3]/50" style={{ background: '#f5f2ed' }}>
+          Disponible al firmar el acta
+        </div>
+      )}
 
       {/* Legajo PDF */}
       <Link
@@ -270,5 +286,7 @@ export default function ProjectOverviewPage({
         </div>
       )}
     </div>
+      <ConfirmDialog open={confirmOpen} message={confirmMessage} onConfirm={onConfirm} onCancel={onCancel} />
+    </>
   );
 }

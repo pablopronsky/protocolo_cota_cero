@@ -12,10 +12,17 @@ const optionalPositiveNumber = z.preprocess(emptyToUndef, z.coerce.number().posi
 // ── Crear proyecto ────────────────────────────────────────
 // Nota: createdBy y responsableComercial NO están acá — los deriva el server
 // desde el token verificado. El cliente no puede falsificar autoría.
+//
+// Flujo de cliente:
+//   - clienteId presente  → usar cliente existente de la colección clients.
+//   - clienteId ausente   → se crean clienteNombre/Contacto/Telefono requeridos
+//     y el server crea el doc en clients antes de crear el proyecto.
 export const CreateProjectInput = z.object({
-  clienteNombre:   z.string().trim().min(1, 'Nombre del cliente requerido'),
-  clienteContacto: z.string().trim().min(1, 'Contacto requerido'),
-  clienteTelefono: z.string().trim().min(1, 'Teléfono requerido'),
+  // Cliente: existente o nuevo
+  clienteId:       optionalString,
+  clienteNombre:   z.preprocess(emptyToUndef, z.string().trim().min(1).optional()),
+  clienteContacto: z.preprocess(emptyToUndef, z.string().trim().min(1).optional()),
+  clienteTelefono: z.preprocess(emptyToUndef, z.string().trim().min(1).optional()),
   clienteEmail:    optionalEmail,
   clienteDniCuit:  optionalString,
 
@@ -33,6 +40,13 @@ export const CreateProjectInput = z.object({
 
   presupuestoRef:     optionalString,
   responsableTecnico: optionalString,
+}).superRefine((d, ctx) => {
+  // Si no viene un clienteId existente, los tres campos de nuevo cliente son obligatorios.
+  if (!d.clienteId) {
+    if (!d.clienteNombre)   ctx.addIssue({ code: 'custom', path: ['clienteNombre'],   message: 'Nombre del cliente requerido' });
+    if (!d.clienteContacto) ctx.addIssue({ code: 'custom', path: ['clienteContacto'], message: 'Contacto requerido' });
+    if (!d.clienteTelefono) ctx.addIssue({ code: 'custom', path: ['clienteTelefono'], message: 'Teléfono requerido' });
+  }
 });
 
 export type CreateProjectInput = z.infer<typeof CreateProjectInput>;

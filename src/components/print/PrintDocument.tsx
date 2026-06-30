@@ -116,7 +116,7 @@ export function Header({ project, docType, status, locked }: {
 export function Footer({ project, doc }: { project: Project; doc: AnyDoc | null }) {
   return (
     <footer className="mt-5 pt-2 border-t border-[#B8AEA3]/50 flex justify-between text-[9px] text-[#B8AEA3] font-mono">
-      <span>{project.cliente.nombre} · {project.code}</span>
+      <span>{project.clienteNombre} · {project.code}</span>
       <span>
         {doc?.lockedAt
           ? `Bloqueado: ${fmtDateTime(doc.lockedAt)}`
@@ -553,16 +553,9 @@ function ClienteBlock({ project }: { project: Project }) {
   return (
     <Section title="Cliente y obra" inherited>
       <Grid>
-        <Field label="Cliente" value={project.cliente.nombre} />
-        <Field label="Contacto" value={project.cliente.contacto} />
-        <Field label="Teléfono" value={project.cliente.telefono} />
+        <Field label="Cliente" value={project.clienteNombre} />
+        <Field label="Domicilio" value={`${project.domicilioObra.calle} ${project.domicilioObra.numero}, ${project.domicilioObra.localidad}`} />
       </Grid>
-      <div className="mt-2">
-        <Field
-          label="Domicilio de obra"
-          value={`${project.domicilioObra.calle} ${project.domicilioObra.numero}, ${project.domicilioObra.localidad}`}
-        />
-      </div>
     </Section>
   );
 }

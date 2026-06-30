@@ -81,7 +81,7 @@ export default function ProjectsPage() {
     const matchSearch =
       !search ||
       p.code.toLowerCase().includes(search.toLowerCase()) ||
-      p.cliente.nombre.toLowerCase().includes(search.toLowerCase()) ||
+      p.clienteNombre.toLowerCase().includes(search.toLowerCase()) ||
       p.domicilioObra.localidad.toLowerCase().includes(search.toLowerCase());
     const matchStatus =
       statusFilter === 'todos' ||
@@ -223,7 +223,7 @@ export default function ProjectsPage() {
                         </td>
                         {/* Cliente */}
                         <td className="px-5 py-4">
-                          <span className="text-[13px] text-[#2B2D2F]">{p.cliente.nombre}</span>
+                          <span className="text-[13px] text-[#2B2D2F]">{p.clienteNombre}</span>
                         </td>
                         {/* Estado */}
                         <td className="px-5 py-4">

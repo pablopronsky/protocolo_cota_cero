@@ -5,10 +5,13 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import SaveIndicator from '@/components/SaveIndicator';
 import { useDoc } from '@/hooks/useDoc';
 import { setDocStatus, writeRevision } from '@/lib/repo/projects';
+import { sequencingError } from '@/lib/sequencing';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
 import { enqueuePhoto, removePhotoFromDoc } from '@/lib/photos';
 import PhotoThumb from '@/components/docs/PhotoThumb';
 import { useAuth } from '@/hooks/useAuth';
+import { useConfirm } from '@/hooks/useConfirm';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { Project, DocRF, AnyDoc, DocType } from '@/schemas';
 import { useProtocolTemplate } from '@/hooks/useProtocolTemplate';
 import { templateSeedFor } from '@/lib/protocolDefaults';
@@ -34,7 +37,9 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
   const isLocked = rf?.status === 'completo' || rf?.status === 'firmado';
   const [locking, setLocking] = useState(false);
   const [lockErrors, setLockErrors] = useState<string[]>([]);
+  const { confirmOpen, confirmMessage, openConfirm, onConfirm, onCancel } = useConfirm();
   const [photoPreviews, setPhotoPreviews] = useState<Map<string, string>>(new Map());
+  const [photoError, setPhotoError] = useState<string | null>(null);
   const { template, loading: tplLoading } = useProtocolTemplate();
   const seededRef = useRef(false);
 
@@ -93,9 +98,11 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
     if (!values.cumpleOT) errs.push('Cumplimiento OT requerido');
     if (!values.fechaRevision) errs.push('Fecha de revisión requerida');
     if (!values.aptoEntrega) errs.push('Marcar como apto para entrega antes de firmar');
+    const seqErr = sequencingError('RF', 'firmado', project.docStatus, upstream);
+    if (seqErr) errs.push(seqErr);
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
-    if (!window.confirm('¿Aprobar y firmar la revisión? El documento quedará bloqueado.')) return;
+    if (!await openConfirm('¿Aprobar y firmar la revisión? El documento quedará bloqueado.')) return;
     cancelAutosave();
     setLocking(true);
     try {
@@ -106,20 +113,27 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
       await setDocStatus(projectCode, 'RF', 'firmado', {
         ...fullValues, lockedSnapshot: snapshot, lockedAt: Date.now(), lockedBy: user?.uid ?? '',
         version: (rf?.version ?? 0) + 1,
-      } as Partial<AnyDoc>, project.status);
+      } as Partial<AnyDoc>, project.status, { docStatus: project.docStatus, upstream });
       await writeRevision(projectCode, 'RF', 'firmado', snapshot, (rf?.version ?? 0) + 1, user?.uid ?? '');
+    } catch (e) {
+      setLockErrors([e instanceof Error ? e.message : 'No se pudo firmar la revisión.']);
     } finally { setLocking(false); }
   }
 
   async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-    const { id, localBlob } = await enqueuePhoto(projectCode, 'RF', file, user.uid);
-    setPhotoPreviews((prev) => new Map(prev).set(id, localBlob));
+    setPhotoError(null);
+    try {
+      const { id, localBlob } = await enqueuePhoto(projectCode, 'RF', file, user.uid);
+      setPhotoPreviews((prev) => new Map(prev).set(id, localBlob));
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : 'No se pudo agregar la foto.');
+    }
   }
 
   async function removePhoto(id: string) {
-    if (!window.confirm('¿Eliminar esta foto?')) return;
+    if (!await openConfirm('¿Eliminar esta foto?')) return;
     const livePhotos = (liveDoc as import('@/schemas').DocRF | null)?.registroFotografico ?? [];
     const photo = livePhotos.find((p) => p.id === id);
     if (!photo) return;
@@ -138,6 +152,7 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
   const ro = seed.readonly as Record<string, unknown>;
 
   return (
+    <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-mono text-[#B8AEA3] capitalize">{rf?.status ?? 'vacio'}</span>
@@ -222,6 +237,7 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
             <input type="file" accept="image/*" capture="environment" className="hidden" onChange={handlePhoto} />
           </label>
         )}
+        {photoError && <p className="text-[12px] text-red-500">{photoError}</p>}
         <div className="grid grid-cols-3 gap-2">
           {((liveDoc as import('@/schemas').DocRF | null)?.registroFotografico ?? []).map((p) => (
             <PhotoThumb
@@ -267,5 +283,7 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
         </button>
       )}
     </form>
+      <ConfirmDialog open={confirmOpen} message={confirmMessage} onConfirm={onConfirm} onCancel={onCancel} />
+    </>
   );
 }

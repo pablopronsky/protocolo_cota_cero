@@ -34,6 +34,39 @@ service cloud.firestore {
                .data.status == 'firmado';
     }
 
+    // #21 — Documento anterior en el protocolo VT→EP→OT→RF→AC→FM.
+    function prevDocType(dt) {
+      return dt == 'EP' ? 'VT'
+           : dt == 'OT' ? 'EP'
+           : dt == 'RF' ? 'OT'
+           : dt == 'AC' ? 'RF'
+           : dt == 'FM' ? 'AC'
+           : '';   // VT no tiene anterior.
+    }
+    function docCerrado(code, dt) {
+      return get(/databases/$(db)/documents/projects/$(code)/documents/$(dt))
+               .data.status in ['completo','firmado'];
+    }
+    function rfApto(code) {
+      return get(/databases/$(db)/documents/projects/$(code)/documents/RF)
+               .data.aptoEntrega == true;
+    }
+    // #21 — Un documento solo se cierra (completo/firmado) si el anterior del
+    // protocolo ya está cerrado; el acta (AC) además exige RF apto para entrega.
+    // Solo cuesta lecturas extra al cerrar, no en cada autosave.
+    function secuenciaOk(code, docType, newStatus) {
+      return !(newStatus in ['completo','firmado'])
+          || ((docType == 'VT' || docCerrado(code, prevDocType(docType)))
+              && (docType != 'AC' || rfApto(code)));
+    }
+
+    match /clients/{clientId} {
+      allow read:   if signedIn();
+      allow create: if false;  // solo Admin SDK crea clientes
+      allow update: if isAdmin();
+      allow delete: if false;
+    }
+
     match /users/{uid} {
       allow read:  if signedIn();
       allow write: if isAdmin();
@@ -53,11 +86,16 @@ service cloud.firestore {
     match /projects/{code} {
       allow read:   if signedIn();
       allow create: if isAdmin();
-      allow update: if isAdmin()
+      allow update: if (isAdmin()
+                        // #11 — Congela createdAt/createdBy: ningún update los puede mutar.
+                        && request.resource.data.createdAt == resource.data.createdAt
+                        && request.resource.data.createdBy == resource.data.createdBy)
                     || (isTecnico()
                           // Solo puede tocar estos cuatro campos.
                           && request.resource.data.diff(resource.data)
                               .affectedKeys().hasOnly(['docStatus','status','updatedAt','updatedBy'])
+                          // #11 — updatedBy debe ser el uid del técnico que escribe.
+                          && request.resource.data.updatedBy == request.auth.uid
                           // status del proyecto debe ser un valor del enum.
                           && request.resource.data.status in ['borrador','en_curso','entregado']
                           // Sin saltos ni retrocesos en el flujo.
@@ -73,22 +111,31 @@ service cloud.firestore {
 
       match /documents/{docType} {
         allow read: if signedIn();
-        // Admin: acceso total a los 6 documentos.
+        // Admin: acceso a los 6 documentos, pero no puede mutar un doc ya bloqueado.
         // Técnico: solo VT, EP, OT, RF.
         // (#5 reglas) AC y FM son exclusivos del admin, coherente con el
         //             guard de UI en ACForm (Batch 3).
-        allow write: if isAdmin()
+        allow write: if (isAdmin()
+                          && (resource == null || !locked(resource.data))
+                          // #21 — no puede cerrar fuera de secuencia (delete: request.resource == null).
+                          && (request.resource == null
+                              || secuenciaOk(code, docType, request.resource.data.status)))
                      || (isTecnico()
                           && docType in ['VT','EP','OT','RF']
                           && (resource == null || !locked(resource.data))
                           // #7 — status del documento también debe ser del enum.
                           && request.resource.data.status
-                               in ['vacio','en_progreso','completo','firmado']);
+                               in ['vacio','en_progreso','completo','firmado']
+                          // #21 — no puede cerrar fuera de secuencia.
+                          && secuenciaOk(code, docType, request.resource.data.status));
       }
 
       match /revisions/{rev} {
         allow read:           if signedIn();
-        allow create:         if signedIn();
+        // #10 — by debe ser el uid del autor; at debe ser el timestamp del servidor.
+        allow create:         if signedIn()
+                                 && request.resource.data.by == request.auth.uid
+                                 && request.resource.data.at == request.time;
         allow update, delete: if false;
       }
     }

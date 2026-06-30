@@ -1,11 +1,21 @@
 import {
   collection, doc, getDoc, getDocs, onSnapshot, addDoc,
   setDoc, updateDoc, writeBatch, query, orderBy, limit, startAfter,
+  serverTimestamp,
   QueryDocumentSnapshot, DocumentData, Unsubscribe,
 } from 'firebase/firestore';
-import { getFirebaseDb } from '../firebase/client';
+import { getFirebaseAuth, getFirebaseDb } from '../firebase/client';
 import type { Project, ProjectCode, DocType, DocStatus, ProjectStatus, AnyDoc } from '@/schemas';
 import { DOC_ORDER } from '@/schemas';
+import { sequencingError } from '../sequencing';
+
+// Datos que necesita setDocStatus para validar la secuencia del protocolo al
+// cerrar un documento. Los aporta el caller, que ya tiene el Project + upstream
+// cargados (evita lecturas extra y funciona offline con writeBatch).
+export interface SequencingGuard {
+  docStatus: Partial<Record<DocType, DocStatus>>;
+  upstream?: Partial<Record<DocType, AnyDoc>>;
+}
 
 const db = () => getFirebaseDb();
 
@@ -95,17 +105,28 @@ export async function setDocStatus(
   status: DocStatus,
   extra: Partial<AnyDoc> = {},
   projectStatus?: ProjectStatus,
+  guard?: SequencingGuard,
 ): Promise<void> {
+  // #21 — Defensa de secuencia en el único camino de escritura de estado. El
+  // form ya valida antes para mostrar el error con UX; esto protege a cualquier
+  // futuro caller. Las reglas Firestore son el backstop de seguridad real.
+  if (guard && (status === 'completo' || status === 'firmado')) {
+    const err = sequencingError(docType, status, guard.docStatus, guard.upstream);
+    if (err) throw new Error(err);
+  }
+
   const batch = writeBatch(db());
   const docRef = doc(db(), 'projects', projectCode, 'documents', docType);
   const projRef = doc(db(), 'projects', projectCode);
   const now = Date.now();
+  const updatedBy = getFirebaseAuth().currentUser?.uid ?? '';
 
   batch.update(docRef, { status, updatedAt: now, ...extra });
 
   const projUpdate: Record<string, unknown> = {
     [`docStatus.${docType}`]: status,
     updatedAt: now,
+    updatedBy,
   };
 
   // Transición de estado del proyecto. Se calcula a partir del estado actual
@@ -145,7 +166,7 @@ export async function writeRevision(
   by: string,
 ): Promise<void> {
   await addDoc(collection(db(), 'projects', projectCode, 'revisions'), {
-    docType, projectCode, action, snapshot, version, by, at: Date.now(),
+    docType, projectCode, action, snapshot, version, by, at: serverTimestamp(),
   });
 }
 

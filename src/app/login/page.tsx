@@ -150,8 +150,6 @@ export default function LoginPage() {
   return (
     <>
       <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800&display=swap');
-
         * { box-sizing: border-box; }
 
         .cc-input { border-color: rgba(255,255,255,0.07) !important; }

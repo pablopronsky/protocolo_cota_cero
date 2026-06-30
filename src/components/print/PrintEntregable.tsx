@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import { getProject, getAllDocs } from '@/lib/repo/projects';
+import { getClient } from '@/lib/repo/clients';
 import { useAuth } from '@/hooks/useAuth';
 import { buildLockedSnapshot } from '@/lib/inheritance';
-import type { Project, DocType, AnyDoc } from '@/schemas';
+import type { Project, Client, DocType, AnyDoc } from '@/schemas';
 import { Body, type Snapshot } from './PrintDocument';
 
 interface Props {
@@ -17,6 +18,7 @@ interface Props {
 export default function PrintEntregable({ code }: Props) {
   const { user, loading: authLoading } = useAuth();
   const [project, setProject] = useState<Project | null>(null);
+  const [client, setClient] = useState<Client | null>(null);
   const [docs, setDocs] = useState<Partial<Record<DocType, AnyDoc>>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -33,6 +35,9 @@ export default function PrintEntregable({ code }: Props) {
         if (!p) { setError(true); setLoading(false); return; }
         setProject(p);
         setDocs(d);
+        if (p.clienteId) {
+          getClient(p.clienteId).then((c) => { if (alive) setClient(c); }).catch(() => {});
+        }
       } catch {
         if (alive) setError(true);
       } finally {
@@ -58,6 +63,18 @@ export default function PrintEntregable({ code }: Props) {
     );
   }
 
+  if (project.docStatus?.AC !== 'firmado') {
+    return (
+      <div className="print-shell">
+        <div className="print-page">
+          <p className="text-sm text-[#B8AEA3]">
+            El entregable estará disponible una vez que el Acta de Conformidad esté firmada.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   const snapFor = (dt: DocType): Snapshot => {
     const d = docs[dt] ?? null;
     return d ? (d.lockedSnapshot ?? buildLockedSnapshot(project, docs, d)) : {};
@@ -75,7 +92,7 @@ export default function PrintEntregable({ code }: Props) {
         <Body docType="FM" project={project} s={snapFor('FM')} />
       </DocPage>
 
-      <Actions project={project} />
+      <Actions project={project} client={client} />
     </div>
   );
 }
@@ -92,7 +109,7 @@ function Cover({ project }: { project: Project }) {
         display: 'flex',
         flexDirection: 'column',
         justifyContent: 'space-between',
-        pageBreakAfter: 'always',
+        breakAfter: 'page',
       }}
     >
       <div className="flex justify-between items-start">
@@ -116,7 +133,7 @@ function Cover({ project }: { project: Project }) {
       </div>
 
       <div className="border-t border-white/10 pt-5 space-y-3">
-        <Row label="Cliente" value={project.cliente.nombre} />
+        <Row label="Cliente" value={project.clienteNombre} />
         <Row
           label="Domicilio de obra"
           value={`${project.domicilioObra.calle} ${project.domicilioObra.numero}, ${project.domicilioObra.localidad}`}
@@ -160,7 +177,7 @@ function DocPage({ title, code, last, children }: {
   title: string; code: string; last?: boolean; children: React.ReactNode;
 }) {
   return (
-    <div className="print-page" style={last ? undefined : { pageBreakAfter: 'always' }}>
+    <div className="print-page" style={last ? undefined : { breakAfter: 'page' }}>
       <header className="flex justify-between items-end border-b-2 border-[#2B2D2F] pb-3 mb-5">
         <div>
           <div className="font-mono font-bold text-lg tracking-[3px] text-[#2B2D2F]">
@@ -184,10 +201,10 @@ function DocPage({ title, code, last, children }: {
 }
 
 // ── Acciones (pantalla) ──────────────────────────────────────
-function Actions({ project }: { project: Project }) {
-  const phone = project.cliente.telefono.replace(/\D/g, '');
+function Actions({ project, client }: { project: Project; client: Client | null }) {
+  const phone = (client?.telefono ?? '').replace(/\D/g, '');
   const msg = encodeURIComponent(
-    `Hola ${project.cliente.nombre}, te compartimos la documentación de entrega de tu obra (${project.code}). ¡Gracias por confiar en COTA·CERO!`,
+    `Hola ${project.clienteNombre}, te compartimos la documentación de entrega de tu obra (${project.code}). ¡Gracias por confiar en COTA·CERO!`,
   );
   const waHref = phone ? `https://wa.me/${phone}?text=${msg}` : `https://wa.me/?text=${msg}`;
 

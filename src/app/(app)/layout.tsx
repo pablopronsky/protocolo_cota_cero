@@ -7,6 +7,8 @@ import { useAuth, logout } from '@/hooks/useAuth';
 import { initPhotoQueueListener } from '@/lib/photos';
 import Logo from '@/components/Logo';
 
+const APP_VERSION = '2.6.0';
+
 /* ── Sidebar icons ──────────────────────────────────────── */
 const IconPrincipio = () => (
   <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
@@ -142,6 +144,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             label="Presupuestos"
             icon={<IconPresupuesto />}
             active={pathname.startsWith('/budgets')}
+            disabled
           />
           <NavItem
             href="/settings"
@@ -164,7 +167,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             className="mt-1.5 font-mono text-[#B8AEA3]/20 uppercase tracking-widest"
             style={{ fontSize: 9 }}
           >
-            Versión 2.6.0
+            Versión {APP_VERSION}
           </p>
         </div>
       </aside>
@@ -173,10 +176,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Top bar */}
         <header className="h-11 px-8 flex items-center justify-end gap-6 border-b border-[rgba(43,45,47,0.08)] shrink-0 bg-[#F5F2ED]">
-          <button className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2B2D2F]/80 hover:text-[#2B2D2F] transition-colors cursor-pointer">
+          <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2B2D2F]/80">
             {displayName}
-            <IconChevron />
-          </button>
+          </span>
           <button
             onClick={() => logout().then(() => router.replace('/login'))}
             className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3]/55 hover:text-[#2B2D2F] transition-colors cursor-pointer"

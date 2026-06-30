@@ -66,7 +66,7 @@ export default function PrintLegajo({ code }: Props) {
   return (
     <div className="print-shell">
       {/* Portada del legajo */}
-      <div className="print-page" style={{ pageBreakAfter: 'always' }}>
+      <div className="print-page" style={{ breakAfter: 'page' }}>
         <header className="flex justify-between items-end border-b-2 border-[#2B2D2F] pb-3 mb-4">
           <div>
             <div className="font-mono font-bold text-xl tracking-[3px]">
@@ -85,7 +85,7 @@ export default function PrintLegajo({ code }: Props) {
         <div className="space-y-3 mt-6">
           <div className="border-b border-[#B8AEA3]/40 pb-3">
             <p className="text-[10px] text-[#B8AEA3] uppercase tracking-wider">Cliente</p>
-            <p className="font-semibold">{project.cliente.nombre}</p>
+            <p className="font-semibold">{project.clienteNombre}</p>
             <p className="text-sm text-[#B8AEA3]">
               {project.domicilioObra.calle} {project.domicilioObra.numero}, {project.domicilioObra.localidad}
             </p>
@@ -128,7 +128,7 @@ export default function PrintLegajo({ code }: Props) {
         </div>
 
         <footer className="mt-5 pt-2 border-t border-[#B8AEA3]/50 flex justify-between text-[9px] text-[#B8AEA3] font-mono">
-          <span>{project.cliente.nombre} · {project.code}</span>
+          <span>{project.clienteNombre} · {project.code}</span>
           <span>Generado: {new Date().toLocaleString('es-AR')}</span>
         </footer>
       </div>
@@ -144,7 +144,7 @@ export default function PrintLegajo({ code }: Props) {
         const isLast = i === DOC_ORDER.length - 1;
 
         return (
-          <div key={dt} className="print-page" style={isLast ? undefined : { pageBreakAfter: 'always' }}>
+          <div key={dt} className="print-page" style={isLast ? undefined : { breakAfter: 'page' }}>
             <Header project={project} docType={dt} status={status} locked={locked} />
             <Body docType={dt} project={project} s={snapshot} />
             <Footer project={project} doc={doc} />

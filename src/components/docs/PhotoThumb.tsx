@@ -29,7 +29,7 @@ export default function PhotoThumb({ photo, localBlob, onRemove }: Props) {
     <div className="aspect-square rounded overflow-hidden bg-[#B8AEA3]/20 relative">
       {url ? (
         // eslint-disable-next-line @next/next/no-img-element
-        <img src={url} alt="" className="w-full h-full object-cover" />
+        <img src={url} alt={photo.caption ?? 'Foto de obra'} className="w-full h-full object-cover" />
       ) : (
         <div className="w-full h-full flex items-center justify-center text-xs text-[#B8AEA3] font-mono">
           {photo.pending ? 'subiendo…' : 'foto'}
@@ -44,6 +44,7 @@ export default function PhotoThumb({ photo, localBlob, onRemove }: Props) {
         <button
           type="button"
           onClick={onRemove}
+          aria-label="Eliminar foto"
           className="absolute top-1 right-1 w-5 h-5 bg-[#2B2D2F]/65 text-white rounded-full flex items-center justify-center text-[11px] leading-none hover:bg-red-500/80 transition-colors"
         >
           ✕

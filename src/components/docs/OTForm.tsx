@@ -5,8 +5,11 @@ import { useForm, useFieldArray } from 'react-hook-form';
 import SaveIndicator from '@/components/SaveIndicator';
 import { useDoc } from '@/hooks/useDoc';
 import { setDocStatus, writeRevision } from '@/lib/repo/projects';
+import { sequencingError } from '@/lib/sequencing';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
 import { useAuth } from '@/hooks/useAuth';
+import { useConfirm } from '@/hooks/useConfirm';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import type { Project, DocOT, AnyDoc, DocType } from '@/schemas';
 import { CRITERIOS_TECNICOS } from '@/schemas';
 import { useProtocolTemplate } from '@/hooks/useProtocolTemplate';
@@ -33,6 +36,7 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
   const isLocked = ot?.status === 'completo' || ot?.status === 'firmado';
   const [locking, setLocking] = useState(false);
   const [lockErrors, setLockErrors] = useState<string[]>([]);
+  const { confirmOpen, confirmMessage, openConfirm, onConfirm, onCancel } = useConfirm();
   const { template, loading: tplLoading } = useProtocolTemplate();
   const seededRef = useRef(false);
 
@@ -77,9 +81,11 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
     if (!values.alcance?.trim()) errs.push('Alcance de la obra requerido');
     if (!values.equipo?.length) errs.push('Agregar al menos un integrante del equipo');
     if (!values.secuenciaEjecucion?.length) errs.push('Agregar al menos un paso en la secuencia');
+    const seqErr = sequencingError('OT', 'completo', project.docStatus, upstream);
+    if (seqErr) errs.push(seqErr);
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
-    if (!window.confirm('¿Marcar como completo? El documento quedará bloqueado.')) return;
+    if (!await openConfirm('¿Marcar como completo? El documento quedará bloqueado.')) return;
     cancelAutosave();
     setLocking(true);
     try {
@@ -87,8 +93,10 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
       await setDocStatus(projectCode, 'OT', 'completo', {
         ...values, lockedSnapshot: snapshot, lockedAt: Date.now(), lockedBy: user?.uid ?? '',
         version: (ot?.version ?? 0) + 1,
-      } as Partial<AnyDoc>, project.status);
+      } as Partial<AnyDoc>, project.status, { docStatus: project.docStatus, upstream });
       await writeRevision(projectCode, 'OT', 'completo', snapshot, (ot?.version ?? 0) + 1, user?.uid ?? '');
+    } catch (e) {
+      setLockErrors([e instanceof Error ? e.message : 'No se pudo bloquear el documento.']);
     } finally { setLocking(false); }
   }
 
@@ -97,6 +105,7 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
   const ro = seed.readonly as Record<string, unknown>;
 
   return (
+    <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-mono text-[#B8AEA3] capitalize">{ot?.status ?? 'vacio'}</span>
@@ -251,5 +260,7 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
         </button>
       )}
     </form>
+      <ConfirmDialog open={confirmOpen} message={confirmMessage} onConfirm={onConfirm} onCancel={onCancel} />
+    </>
   );
 }
