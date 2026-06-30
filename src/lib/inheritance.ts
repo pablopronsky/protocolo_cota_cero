@@ -73,7 +73,10 @@ export function deriveInherited(
     case 'AC':
       return {
         readonly: {
-          cliente: project.cliente,
+          // clienteNombre es el campo denormalizado en Project.
+          // Se guarda como objeto para mantener compatibilidad con los snapshots
+          // bloqueados anteriores que usaban {nombre, contacto, telefono}.
+          cliente: { nombre: project.clienteNombre },
           domicilioObra: project.domicilioObra,
           obraEjecutada: ot?.alcance ?? '',
         },
@@ -106,7 +109,12 @@ export function buildLockedSnapshot(
     ...docData,
     ...seed.readonly,
     ...Object.fromEntries(
-      Object.entries(seed.editable).map(([k, v]) => [k, (v as Inherited<unknown>).value]),
+      Object.entries(seed.editable).map(([k, v]) => {
+        const derived = v as Inherited<unknown>;
+        const stored = (docData as Record<string, unknown>)[k] as Inherited<unknown> | undefined;
+        // Preserve tech overrides: if the field was manually changed, snapshot that value.
+        return [k, stored?.overridden ? stored.value : derived.value];
+      }),
     ),
   };
 }
