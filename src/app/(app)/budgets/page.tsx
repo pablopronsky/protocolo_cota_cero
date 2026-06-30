@@ -11,7 +11,7 @@ export default function BudgetsPage() {
       </div>
       <div className="mt-12 py-24 border border-dashed border-[#B8AEA3]/25 rounded-lg flex flex-col items-center justify-center gap-3">
         <span className="text-[11px] font-bold uppercase tracking-[0.3em] text-[#C38A5A]/60">Próximamente</span>
-        <p className="text-[13px] text-[#B8AEA3]/60 text-center max-w-xs">
+        <p className="text-[13px] text-[#6B6155] text-center max-w-xs">
           El módulo de Presupuestos estará disponible en una próxima versión.
         </p>
       </div>

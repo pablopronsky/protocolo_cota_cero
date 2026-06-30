@@ -36,7 +36,7 @@ export default function DocEditorPage({
   if (loading) {
     return (
       <div className="py-16 text-center">
-        <span className="text-[13px] font-mono uppercase tracking-[0.2em] text-[#B8AEA3]/50">
+        <span className="text-[13px] font-mono uppercase tracking-[0.2em] text-[#6B6155]">
           Cargando…
         </span>
       </div>
@@ -54,7 +54,7 @@ export default function DocEditorPage({
       {/* ── Breadcrumb ─────────────────────────────────── */}
       <Link
         href="/projects"
-        className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.24em] text-[#B8AEA3]/55 hover:text-[#C38A5A] transition-colors mb-5 no-print"
+        className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.24em] text-[#6B6155] hover:text-[#C38A5A] transition-colors mb-5 no-print"
       >
         <span className="text-base leading-none">←</span>
         Proyectos
@@ -89,14 +89,14 @@ export default function DocEditorPage({
           href={`/print/${code}/${docType}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-[0.18em] border border-[rgba(43,45,47,0.15)] rounded px-3 py-1.5 text-[#B8AEA3]/60 hover:border-[#C38A5A]/40 hover:text-[#C38A5A] no-print transition-colors"
+          className="ml-auto shrink-0 text-[10px] font-bold uppercase tracking-[0.18em] border border-[rgba(43,45,47,0.15)] rounded px-3 py-1.5 text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] no-print transition-colors"
         >
           Imprimir
         </Link>
       </div>
 
       {/* Status badge */}
-      <span className="inline-block text-[10px] font-bold uppercase tracking-[0.2em] text-[#B8AEA3]/55 mb-6">
+      <span className="inline-block text-[10px] font-bold uppercase tracking-[0.2em] text-[#6B6155] mb-6">
         {STATUS_LABEL[currentStatus]}
       </span>
 

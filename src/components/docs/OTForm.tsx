@@ -101,14 +101,14 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
   }
 
   const inputCls = `w-full border rounded-md px-3 py-2.5 text-sm focus:border-[#C38A5A] focus:outline-none transition-colors ${isLocked ? 'opacity-50 pointer-events-none bg-[#111] border-[#333] text-[#B8AEA3]' : 'bg-[#111] border-[#2A2A2A] text-[#F5F2ED]'}`;
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3] mb-1.5';
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
   const ro = seed.readonly as Record<string, unknown>;
 
   return (
     <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-[#B8AEA3] capitalize">{ot?.status ?? 'vacio'}</span>
+        <span className="text-xs font-mono text-[#6B6155] capitalize">{ot?.status ?? 'vacio'}</span>
         <SaveIndicator state={saveState} />
       </div>
 
@@ -123,10 +123,10 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
         <p className="eyebrow">Datos heredados · Solo lectura</p>
         <div className="text-sm space-y-1">
           {project.domicilioObra && (
-            <p><span className="text-[#B8AEA3]">Domicilio:</span> {project.domicilioObra.calle} {project.domicilioObra.numero}, {project.domicilioObra.localidad}</p>
+            <p><span className="text-[#6B6155]">Domicilio:</span> {project.domicilioObra.calle} {project.domicilioObra.numero}, {project.domicilioObra.localidad}</p>
           )}
-          <p><span className="text-[#B8AEA3]">Material:</span> {project.materialInstalado.tipo} · {project.materialInstalado.descripcion}</p>
-          <p><span className="text-[#B8AEA3]">Soporte:</span> {String(ro.materialSoporte || '—')}</p>
+          <p><span className="text-[#6B6155]">Material:</span> {project.materialInstalado.tipo} · {project.materialInstalado.descripcion}</p>
+          <p><span className="text-[#6B6155]">Soporte:</span> {String(ro.materialSoporte || '—')}</p>
         </div>
       </div>
 
@@ -136,11 +136,11 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
         {equipo.map((f, i) => (
           <div key={f.id} className="flex gap-2 items-end">
             <div className="flex-1">
-              <label htmlFor={`equipo-${i}-nombre`} className="text-xs text-[#B8AEA3] block mb-0.5">Nombre</label>
+              <label htmlFor={`equipo-${i}-nombre`} className="text-xs text-[#6B6155] block mb-0.5">Nombre</label>
               <input id={`equipo-${i}-nombre`} {...register(`equipo.${i}.nombre`)} className={inputCls} disabled={isLocked} />
             </div>
             <div className="flex-1">
-              <label htmlFor={`equipo-${i}-rol`} className="text-xs text-[#B8AEA3] block mb-0.5">Rol</label>
+              <label htmlFor={`equipo-${i}-rol`} className="text-xs text-[#6B6155] block mb-0.5">Rol</label>
               <input id={`equipo-${i}-rol`} {...register(`equipo.${i}.rol`)} className={inputCls} disabled={isLocked} />
             </div>
             {!isLocked && <button type="button" onClick={() => removeEquipo(i)} className="text-red-400 text-sm pb-3">✕</button>}
@@ -173,7 +173,7 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
         {secuencia.map((f, i) => (
           <div key={f.id} className="border border-[rgba(43,45,47,0.10)] rounded-md px-3 py-2 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-mono text-[#B8AEA3]">Paso {i + 1}</span>
+              <span className="text-xs font-mono text-[#6B6155]">Paso {i + 1}</span>
               {!isLocked && <button type="button" onClick={() => removePaso(i)} className="text-red-400 text-xs">✕</button>}
             </div>
             <input placeholder="Descripción" {...register(`secuenciaEjecucion.${i}.descripcion`)} className={inputCls} disabled={isLocked} />

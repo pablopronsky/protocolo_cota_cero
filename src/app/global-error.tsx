@@ -22,7 +22,7 @@ export default function GlobalError({
           <h1 style={{ fontSize: 20, fontWeight: 800, color: '#2B2D2F', marginBottom: '0.75rem' }}>
             Algo salió mal
           </h1>
-          <p style={{ fontSize: 13, color: '#B8AEA3', marginBottom: '1.5rem', lineHeight: 1.6 }}>
+          <p style={{ fontSize: 13, color: '#6B6155', marginBottom: '1.5rem', lineHeight: 1.6 }}>
             {error.message || 'Error inesperado. Por favor intentá de nuevo.'}
             {error.digest && (
               <span style={{ display: 'block', fontFamily: 'monospace', fontSize: 11, marginTop: '0.5rem' }}>

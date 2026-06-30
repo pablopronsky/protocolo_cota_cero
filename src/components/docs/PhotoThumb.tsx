@@ -31,7 +31,7 @@ export default function PhotoThumb({ photo, localBlob, onRemove }: Props) {
         // eslint-disable-next-line @next/next/no-img-element
         <img src={url} alt={photo.caption ?? 'Foto de obra'} className="w-full h-full object-cover" />
       ) : (
-        <div className="w-full h-full flex items-center justify-center text-xs text-[#B8AEA3] font-mono">
+        <div className="w-full h-full flex items-center justify-center text-xs text-[#6B6155] font-mono">
           {photo.pending ? 'subiendo…' : 'foto'}
         </div>
       )}

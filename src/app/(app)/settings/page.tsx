@@ -33,7 +33,7 @@ export default function SettingsPage() {
         <h1 className="text-xl font-bold text-[#2B2D2F]">Usuarios</h1>
       </div>
 
-      <p className="text-xs text-[#B8AEA3] leading-relaxed">
+      <p className="text-xs text-[#6B6155] leading-relaxed">
         Los roles se asignan con custom claims via Admin SDK. Contactar al admin técnico para realizar cambios.
       </p>
 
@@ -45,14 +45,14 @@ export default function SettingsPage() {
           >
             <div className="min-w-0">
               <p className="font-semibold text-sm text-[#2B2D2F] truncate">{u.nombre}</p>
-              <p className="text-xs text-[#B8AEA3] font-mono truncate">{u.email}</p>
+              <p className="text-xs text-[#6B6155] font-mono truncate">{u.email}</p>
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <span
                 className={`text-[14px] font-bold uppercase tracking-[0.14em] border rounded px-2 py-px ${
                   u.role === 'admin'
                     ? 'bg-[#2B2D2F] text-[#C38A5A] border-[#2B2D2F]'
-                    : 'text-[#B8AEA3] border-[#B8AEA3]/35'
+                    : 'text-[#6B6155] border-[#B8AEA3]/35'
                 }`}
               >
                 {u.role}

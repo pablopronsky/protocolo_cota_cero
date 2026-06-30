@@ -93,7 +93,7 @@ export default function ClientsPage() {
           CLIENTES
         </h1>
         {!loading && (
-          <p className="mt-2 text-[13px] text-[#B8AEA3]">
+          <p className="mt-2 text-[13px] text-[#6B6155]">
             {filtered.length} cliente{filtered.length !== 1 ? 's' : ''}
           </p>
         )}
@@ -101,7 +101,7 @@ export default function ClientsPage() {
 
       {/* ── Filter ───────────────────────────────────────── */}
       <div className="relative flex-1 max-w-[480px]">
-        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#B8AEA3]/60 pointer-events-none">
+        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B6155] pointer-events-none">
           <IconSearch />
         </span>
         <input
@@ -109,14 +109,14 @@ export default function ClientsPage() {
           placeholder="Buscar por nombre, teléfono, email o DNI"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full border border-[rgba(43,45,47,0.12)] rounded-md pl-9 pr-4 py-2.5 text-[13px] bg-white placeholder:text-[#B8AEA3]/50 focus:border-[#C38A5A] focus:outline-none transition-colors"
+          className="w-full border border-[rgba(43,45,47,0.12)] rounded-md pl-9 pr-4 py-2.5 text-[13px] bg-white placeholder:text-[#8C8275] focus:border-[#C38A5A] focus:outline-none transition-colors"
         />
       </div>
 
       {/* ── Loading ──────────────────────────────────────── */}
       {loading && (
         <div className="py-24 text-center">
-          <span className="text-[11px] font-mono uppercase tracking-[0.28em] text-[#B8AEA3]/50">Cargando…</span>
+          <span className="text-[11px] font-mono uppercase tracking-[0.28em] text-[#6B6155]">Cargando…</span>
         </div>
       )}
 
@@ -125,7 +125,7 @@ export default function ClientsPage() {
         <>
           {filtered.length === 0 ? (
             <div className="py-24 text-center border border-dashed border-[#B8AEA3]/20 rounded-lg">
-              <p className="text-[13px] text-[#B8AEA3]/50">
+              <p className="text-[13px] text-[#6B6155]">
                 {rows.length === 0
                   ? 'Todavía no hay clientes. Se crean al dar de alta proyectos.'
                   : 'Sin clientes que coincidan.'}
@@ -139,7 +139,7 @@ export default function ClientsPage() {
                     {['Cliente','Contacto','Proyectos','Últ. actividad'].map((col) => (
                       <th
                         key={col}
-                        className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3]/70 whitespace-nowrap"
+                        className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] whitespace-nowrap"
                       >
                         {col}
                       </th>
@@ -158,13 +158,13 @@ export default function ClientsPage() {
                       <td className="px-5 py-4">
                         <span className="font-bold text-[14px] text-[#2B2D2F] tracking-tight">{c.nombre}</span>
                         {c.dni_cuit && (
-                          <span className="block text-[11px] font-mono text-[#B8AEA3]/70 mt-0.5">{c.dni_cuit}</span>
+                          <span className="block text-[11px] font-mono text-[#6B6155] mt-0.5">{c.dni_cuit}</span>
                         )}
                       </td>
                       <td className="px-5 py-4">
                         <span className="text-[13px] text-[#2B2D2F]">{c.telefono || '—'}</span>
                         {c.email && (
-                          <span className="block text-[12px] text-[#B8AEA3]/70 mt-0.5">{c.email}</span>
+                          <span className="block text-[12px] text-[#6B6155] mt-0.5">{c.email}</span>
                         )}
                       </td>
                       <td className="px-5 py-4">
@@ -178,7 +178,7 @@ export default function ClientsPage() {
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        <span className="text-[13px] text-[#B8AEA3]/70">{fmtDate(c.lastActivity)}</span>
+                        <span className="text-[13px] text-[#6B6155]">{fmtDate(c.lastActivity)}</span>
                       </td>
                     </tr>
                   ))}
@@ -189,25 +189,25 @@ export default function ClientsPage() {
 
           {filtered.length > 0 && (
             <div className="flex items-center justify-between pt-1">
-              <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3]/50">
+              <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#6B6155]">
                 {filtered.length} Cliente{filtered.length !== 1 ? 's' : ''}
               </span>
               <div className="flex items-center gap-4">
-                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#B8AEA3]/50">
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155]">
                   Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
                 </span>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={page === 0}
-                    className="w-7 h-7 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#B8AEA3]/60 hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+                    className="w-7 h-7 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
                   >
                     <IconChevronLeft />
                   </button>
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                     disabled={page >= totalPages - 1}
-                    className="w-7 h-7 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#B8AEA3]/60 hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+                    className="w-7 h-7 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
                   >
                     <IconChevronRight />
                   </button>

@@ -58,7 +58,7 @@ function AmbienteVarillas({ control, register, nestIndex, isLocked, inputCls }: 
   });
   return (
     <div className="space-y-2">
-      <p className="text-xs text-[#B8AEA3]">Varillas</p>
+      <p className="text-xs text-[#6B6155]">Varillas</p>
       {fields.map((f, j) => (
         <div key={f.id} className="flex gap-2 items-center">
           <input
@@ -246,14 +246,14 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
   }
 
   const inputCls = `w-full border rounded-md px-3 py-2.5 text-sm focus:border-[#C38A5A] focus:outline-none transition-colors ${isLocked ? 'opacity-50 pointer-events-none bg-[#111] border-[#333] text-[#B8AEA3]' : 'bg-[#111] border-[#2A2A2A] text-[#F5F2ED]'}`;
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3] mb-1.5';
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
 
   return (
     <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       {/* Status bar */}
       <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-[#B8AEA3] capitalize">
+        <span className="text-xs font-mono text-[#6B6155] capitalize">
           {vt?.status ?? 'vacio'}
         </span>
         <SaveIndicator state={saveState} />
@@ -313,15 +313,15 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
             <div key={field.id} className="rounded-md border border-[rgba(43,45,47,0.12)] p-3 space-y-3">
               <div className="flex gap-2 items-end">
                 <div className="flex-1">
-                  <label htmlFor={`ambientes-${i}-nombre`} className="text-xs text-[#B8AEA3] mb-0.5 block">Nombre</label>
+                  <label htmlFor={`ambientes-${i}-nombre`} className="text-xs text-[#6B6155] mb-0.5 block">Nombre</label>
                   <input id={`ambientes-${i}-nombre`} {...register(`ambientes.${i}.nombre`)} className={inputCls} placeholder="Ej: Living" disabled={isLocked} />
                 </div>
                 <div className="w-20">
-                  <label htmlFor={`ambientes-${i}-m2`} className="text-xs text-[#B8AEA3] mb-0.5 block">m²</label>
+                  <label htmlFor={`ambientes-${i}-m2`} className="text-xs text-[#6B6155] mb-0.5 block">m²</label>
                   <input id={`ambientes-${i}-m2`} type="number" inputMode="decimal" {...register(`ambientes.${i}.m2`, { valueAsNumber: true })} className={inputCls} disabled={isLocked} />
                 </div>
                 <div className="w-24">
-                  <label htmlFor={`ambientes-${i}-zocalo`} className="text-xs text-[#B8AEA3] mb-0.5 block">Zócalo (ml)</label>
+                  <label htmlFor={`ambientes-${i}-zocalo`} className="text-xs text-[#6B6155] mb-0.5 block">Zócalo (ml)</label>
                   <input id={`ambientes-${i}-zocalo`} type="number" inputMode="decimal" {...register(`ambientes.${i}.zocaloMl`, { valueAsNumber: true })} className={inputCls} disabled={isLocked} />
                 </div>
                 {!isLocked && (
@@ -336,7 +336,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
               + Agregar ambiente
             </button>
           )}
-          <p className="text-xs text-[#B8AEA3] font-mono">Total: {watch('m2Total') ?? 0} m²</p>
+          <p className="text-xs text-[#6B6155] font-mono">Total: {watch('m2Total') ?? 0} m²</p>
         </div>
       </Section>
 

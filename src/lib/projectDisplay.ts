@@ -4,10 +4,10 @@ import { DOC_ORDER } from '@/schemas';
 // Estilos del badge de estado del proyecto. Compartido entre la lista de
 // proyectos y las vistas de clientes para mantener una sola fuente de verdad.
 export const PROJECT_STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
-  borrador:  { label: 'Borrador',  bg: 'bg-[#B8AEA3]/20', text: 'text-[#B8AEA3]' },
+  borrador:  { label: 'Borrador',  bg: 'bg-[#B8AEA3]/20', text: 'text-[#6B6155]' },
   en_curso:  { label: 'En Curso',  bg: 'bg-[#7BA88A]/20', text: 'text-[#5A8A6A]' },
   entregado: { label: 'Entregado', bg: 'bg-[#2B2D2F]/10', text: 'text-[#2B2D2F]' },
-  archivado: { label: 'Archivado', bg: 'bg-[#B8AEA3]/10', text: 'text-[#B8AEA3]/60' },
+  archivado: { label: 'Archivado', bg: 'bg-[#B8AEA3]/10', text: 'text-[#6B6155]' },
 };
 
 // Progreso 0–100 del legajo según el estado de los 6 documentos.

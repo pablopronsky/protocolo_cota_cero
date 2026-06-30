@@ -125,7 +125,7 @@ export default function ProtocolPage() {
 
   const inputCls =
     'w-full border rounded-md px-3 py-2.5 text-sm focus:border-[#C38A5A] focus:outline-none transition-colors bg-[#111] border-[#2A2A2A] text-[#F5F2ED]';
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3] mb-1.5';
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
   const checkboxGridCls = 'grid grid-cols-2 gap-y-2.5 gap-x-4';
   const checkboxLabelCls = 'flex items-center gap-2.5 text-sm capitalize';
 
@@ -139,7 +139,7 @@ export default function ProtocolPage() {
         >
           PROTOCOLO
         </h1>
-        <p className="mt-2 text-sm text-[#B8AEA3]">
+        <p className="mt-2 text-sm text-[#6B6155]">
           Valores por defecto precargados al crear un documento nuevo.
         </p>
       </div>

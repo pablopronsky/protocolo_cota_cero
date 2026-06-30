@@ -33,22 +33,22 @@ function ClientPicker({ selected, onSelect }: ClientPickerProps) {
       })
     : clients.slice(0, 6);
 
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3] mb-1.5';
-  const inputCls = 'w-full border border-[rgba(43,45,47,0.18)] rounded-md px-3 py-2.5 bg-white text-sm text-[#2B2D2F] placeholder:text-[#B8AEA3] focus:border-[#C38A5A] focus:outline-none transition-colors';
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
+  const inputCls = 'w-full border border-[rgba(43,45,47,0.18)] rounded-md px-3 py-2.5 bg-white text-sm text-[#2B2D2F] placeholder:text-[#8C8275] focus:border-[#C38A5A] focus:outline-none transition-colors';
 
   if (selected) {
     return (
       <div className="flex items-center justify-between gap-4 bg-[#F5F2ED] border border-[#C38A5A]/30 rounded-lg px-4 py-3">
         <div>
           <p className="font-bold text-[14px] text-[#2B2D2F]">{selected.nombre}</p>
-          <p className="text-[12px] text-[#B8AEA3]">
+          <p className="text-[12px] text-[#6B6155]">
             {[selected.telefono, selected.email, selected.dni_cuit].filter(Boolean).join(' · ')}
           </p>
         </div>
         <button
           type="button"
           onClick={() => onSelect(null)}
-          className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#B8AEA3] hover:text-[#C38A5A] transition-colors shrink-0"
+          className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155] hover:text-[#C38A5A] transition-colors shrink-0"
         >
           Cambiar
         </button>
@@ -80,7 +80,7 @@ function ClientPicker({ selected, onSelect }: ClientPickerProps) {
                   }`}
                 >
                   <p className="font-semibold text-[13px] text-[#2B2D2F]">{c.nombre}</p>
-                  <p className="text-[11px] text-[#B8AEA3]">
+                  <p className="text-[11px] text-[#6B6155]">
                     {[c.telefono, c.email, c.dni_cuit].filter(Boolean).join(' · ')}
                   </p>
                 </button>
@@ -88,14 +88,14 @@ function ClientPicker({ selected, onSelect }: ClientPickerProps) {
             </div>
           )}
           {query.trim() && filtered.length === 0 && (
-            <p className="text-[12px] text-[#B8AEA3]/70 px-1">
+            <p className="text-[12px] text-[#6B6155] px-1">
               Sin resultados para <strong>{query}</strong>.
             </p>
           )}
           <button
             type="button"
             onClick={() => setShowNew(true)}
-            className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#B8AEA3] hover:text-[#C38A5A] transition-colors"
+            className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155] hover:text-[#C38A5A] transition-colors"
           >
             + Nuevo cliente
           </button>
@@ -132,7 +132,7 @@ function ClientPicker({ selected, onSelect }: ClientPickerProps) {
           <button
             type="button"
             onClick={() => setShowNew(false)}
-            className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#B8AEA3] hover:text-[#C38A5A] transition-colors"
+            className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155] hover:text-[#C38A5A] transition-colors"
           >
             ← Buscar existente
           </button>
@@ -228,7 +228,7 @@ function NewProjectForm() {
       {...extra}
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      className="w-full border border-[rgba(43,45,47,0.18)] rounded-md px-3 py-2.5 bg-white text-sm text-[#2B2D2F] placeholder:text-[#B8AEA3] focus:border-[#C38A5A] focus:outline-none transition-colors"
+      className="w-full border border-[rgba(43,45,47,0.18)] rounded-md px-3 py-2.5 bg-white text-sm text-[#2B2D2F] placeholder:text-[#8C8275] focus:border-[#C38A5A] focus:outline-none transition-colors"
     />
   );
   const sel = (value: string, onChange: (v: string) => void, children: React.ReactNode) => (
@@ -240,12 +240,12 @@ function NewProjectForm() {
       {children}
     </select>
   );
-  const labelCls = 'block text-[15px] font-bold uppercase tracking-[0.16em] text-[#B8AEA3] mb-1.5';
+  const labelCls = 'block text-[15px] font-bold uppercase tracking-[0.16em] text-[#6B6155] mb-1.5';
 
   return (
     <div className="space-y-5 pb-10">
       <div>
-        <a href="/projects" className="text-[15px] font-bold uppercase tracking-[0.2em] text-[#B8AEA3] hover:text-[#C38A5A] transition-colors">
+        <a href="/projects" className="text-[15px] font-bold uppercase tracking-[0.2em] text-[#6B6155] hover:text-[#C38A5A] transition-colors">
           ← Proyectos
         </a>
         <h1 className="text-xl font-bold text-[#2B2D2F] mt-1.5">Nuevo proyecto</h1>
@@ -357,7 +357,7 @@ function NewProjectForm() {
                 <option key={u.uid} value={u.uid}>{u.nombre}</option>
               ))}
             </>)}
-            <p className="text-xs text-[#B8AEA3] mt-1.5">Se puede cambiar después desde el overview del proyecto.</p>
+            <p className="text-xs text-[#6B6155] mt-1.5">Se puede cambiar después desde el overview del proyecto.</p>
           </div>
         </div>
 

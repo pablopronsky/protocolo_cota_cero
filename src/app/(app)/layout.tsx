@@ -63,7 +63,7 @@ function NavItem({
 }) {
   const cls = `flex items-center gap-2.5 px-3 py-2 rounded-sm text-[11px] font-bold uppercase tracking-[0.2em] transition-colors duration-150 ${
     disabled
-      ? 'text-[#B8AEA3]/38 pointer-events-none'
+      ? 'text-[#B8AEA3]/60 pointer-events-none'
       : active
       ? 'text-[#C38A5A]'
       : 'text-[#B8AEA3] hover:text-[#F5F2ED]'
@@ -158,13 +158,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         <div className="px-5 py-5 border-t border-white/[0.05]">
           <div className="w-6 h-px bg-[#C38A5A]/40 mb-3" />
           <p
-            className="font-bold uppercase text-[#B8AEA3]/35 leading-[1.7]"
+            className="font-bold uppercase text-[#B8AEA3]/80 leading-[1.7]"
             style={{ fontSize: 9, letterSpacing: '0.22em' }}
           >
             Protocolo<br />de Obra
           </p>
           <p
-            className="mt-1.5 font-mono text-[#B8AEA3]/20 uppercase tracking-widest"
+            className="mt-1.5 font-mono text-[#B8AEA3]/70 uppercase tracking-widest"
             style={{ fontSize: 9 }}
           >
             Versión {APP_VERSION}
@@ -181,7 +181,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </span>
           <button
             onClick={() => logout().then(() => router.replace('/login'))}
-            className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3]/55 hover:text-[#2B2D2F] transition-colors cursor-pointer"
+            className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#6B6155] hover:text-[#2B2D2F] transition-colors cursor-pointer"
           >
             Salir
           </button>

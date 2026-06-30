@@ -107,14 +107,14 @@ export default function FMForm({ projectCode, project, upstream, docData }: Prop
   }
 
   const inputCls = `w-full border rounded-md px-3 py-2.5 text-sm focus:border-[#C38A5A] focus:outline-none transition-colors ${isLocked ? 'opacity-50 pointer-events-none bg-[#111] border-[#333] text-[#B8AEA3]' : 'bg-[#111] border-[#2A2A2A] text-[#F5F2ED]'}`;
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3] mb-1.5';
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
   const materialInstalado = ro.materialInstalado as typeof project.materialInstalado | undefined;
 
   return (
     <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-[#B8AEA3] capitalize">{fm?.status ?? 'vacio'}</span>
+        <span className="text-xs font-mono text-[#6B6155] capitalize">{fm?.status ?? 'vacio'}</span>
         <SaveIndicator state={saveState} />
       </div>
 
@@ -135,9 +135,9 @@ export default function FMForm({ projectCode, project, upstream, docData }: Prop
           )}
         </div>
         <div className="text-sm space-y-1">
-          <p><span className="text-[#B8AEA3]">Tipo:</span> {materialInstalado?.tipo ?? '—'}</p>
-          <p><span className="text-[#B8AEA3]">Descripción:</span> {materialInstalado?.descripcion ?? '—'}</p>
-          <p><span className="text-[#B8AEA3]">Espacio:</span> {String(ro.tipoEspacio ?? '—').replace('_', ' ')}</p>
+          <p><span className="text-[#6B6155]">Tipo:</span> {materialInstalado?.tipo ?? '—'}</p>
+          <p><span className="text-[#6B6155]">Descripción:</span> {materialInstalado?.descripcion ?? '—'}</p>
+          <p><span className="text-[#6B6155]">Espacio:</span> {String(ro.tipoEspacio ?? '—').replace('_', ' ')}</p>
         </div>
       </div>
 

@@ -194,7 +194,7 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
   }
 
   const inputCls = `w-full border rounded-md px-3 py-2.5 text-sm focus:border-[#C38A5A] focus:outline-none transition-colors ${contentLocked ? 'opacity-50 pointer-events-none bg-[#111] border-[#333] text-[#B8AEA3]' : 'bg-[#111] border-[#2A2A2A] text-[#F5F2ED]'}`;
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3] mb-1.5';
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
 
   const clienteData = ro.cliente as { nombre?: string } | undefined;
   const domicilio = ro.domicilioObra as typeof project.domicilioObra | undefined;
@@ -203,7 +203,7 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
     <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-[#B8AEA3] capitalize">{ac?.status ?? 'vacio'}</span>
+        <span className="text-xs font-mono text-[#6B6155] capitalize">{ac?.status ?? 'vacio'}</span>
         <SaveIndicator state={saveState} />
       </div>
 
@@ -235,9 +235,9 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
       <div className="bg-[#F5F2ED] border border-[rgba(43,45,47,0.08)] rounded-lg px-4 py-3 space-y-2">
         <p className="eyebrow">Datos heredados · Solo lectura</p>
         <div className="text-sm space-y-1">
-          <p><span className="text-[#B8AEA3]">Cliente:</span> {clienteData?.nombre ?? '—'}</p>
-          <p><span className="text-[#B8AEA3]">Domicilio:</span> {domicilio ? `${domicilio.calle} ${domicilio.numero}, ${domicilio.localidad}` : '—'}</p>
-          <p><span className="text-[#B8AEA3]">Obra ejecutada:</span> {String(ro.obraEjecutada || '—')}</p>
+          <p><span className="text-[#6B6155]">Cliente:</span> {clienteData?.nombre ?? '—'}</p>
+          <p><span className="text-[#6B6155]">Domicilio:</span> {domicilio ? `${domicilio.calle} ${domicilio.numero}, ${domicilio.localidad}` : '—'}</p>
+          <p><span className="text-[#6B6155]">Obra ejecutada:</span> {String(ro.obraEjecutada || '—')}</p>
         </div>
       </div>
 

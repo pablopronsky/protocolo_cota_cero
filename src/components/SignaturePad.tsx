@@ -106,7 +106,7 @@ export default function SignaturePad({ onSave, saved, disabled }: Props) {
           type="button"
           onClick={clear}
           disabled={disabled || !hasInk}
-          className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#B8AEA3] disabled:opacity-40"
+          className="text-[11px] font-bold uppercase tracking-[0.2em] text-[#6B6155] disabled:opacity-40"
         >
           Borrar
         </button>
@@ -119,7 +119,7 @@ export default function SignaturePad({ onSave, saved, disabled }: Props) {
         >
           {saved ? '✓ Firma guardada · Re-firmar' : 'Guardar firma'}
         </button>
-        <span className="text-[11px] text-[#B8AEA3]/70">Firmá con el dedo</span>
+        <span className="text-[11px] text-[#6B6155]">Firmá con el dedo</span>
       </div>
     </div>
   );

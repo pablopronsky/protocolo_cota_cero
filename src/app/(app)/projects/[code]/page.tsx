@@ -23,11 +23,11 @@ const STATUS_CONFIG: Record<DocStatus, {
   vacio: {
     label: 'Pendiente',
     rowCls: 'border-[rgba(43,45,47,0.08)] bg-white hover:border-[#C38A5A]/30 hover:shadow-[0_1px_8px_rgba(195,138,90,0.05)]',
-    codeCls: 'text-[#B8AEA3]/60',
-    labelCls: 'text-[#B8AEA3]',
-    numCls: 'text-[#B8AEA3]/35',
+    codeCls: 'text-[#6B6155]',
+    labelCls: 'text-[#6B6155]',
+    numCls: 'text-[#6B6155]',
     dotCls: 'border-[#B8AEA3]/25 bg-transparent',
-    chevronCls: 'text-[#B8AEA3]/30',
+    chevronCls: 'text-[#6B6155]',
   },
   en_progreso: {
     label: 'En progreso',
@@ -45,16 +45,16 @@ const STATUS_CONFIG: Record<DocStatus, {
     labelCls: 'text-[#2B2D2F]',
     numCls: 'text-[#2B2D2F]/35',
     dotCls: 'border-[#C38A5A] bg-[#C38A5A]',
-    chevronCls: 'text-[#B8AEA3]/40',
+    chevronCls: 'text-[#6B6155]',
   },
   firmado: {
     label: 'Firmado',
     rowCls: 'border-[#2B2D2F] bg-[#2B2D2F] hover:border-[#2B2D2F]',
     codeCls: 'text-[#C38A5A]',
     labelCls: 'text-[#F5F2ED]',
-    numCls: 'text-[#B8AEA3]/45',
+    numCls: 'text-[#B8AEA3]/70',
     dotCls: 'border-[#C38A5A] bg-[#C38A5A]',
-    chevronCls: 'text-[#B8AEA3]/35',
+    chevronCls: 'text-[#B8AEA3]/60',
   },
 };
 
@@ -72,7 +72,7 @@ export default function ProjectOverviewPage({
   if (loading) {
     return (
       <div className="py-20 text-center">
-        <span className="text-[11px] font-mono uppercase tracking-[0.24em] text-[#B8AEA3]/60">
+        <span className="text-[11px] font-mono uppercase tracking-[0.24em] text-[#6B6155]">
           Cargando…
         </span>
       </div>
@@ -121,7 +121,7 @@ export default function ProjectOverviewPage({
       {/* Back link */}
       <Link
         href="/projects"
-        className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.24em] text-[#B8AEA3]/60 hover:text-[#C38A5A] transition-colors"
+        className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.24em] text-[#6B6155] hover:text-[#C38A5A] transition-colors"
       >
         <span className="text-base leading-none">←</span>
         Proyectos
@@ -134,7 +134,7 @@ export default function ProjectOverviewPage({
             {project.code}
           </span>
           {isArchived && (
-            <span className="text-[10px] font-bold uppercase tracking-[0.16em] border border-[#B8AEA3]/25 text-[#B8AEA3]/50 rounded px-1.5 py-px">
+            <span className="text-[10px] font-bold uppercase tracking-[0.16em] border border-[#B8AEA3]/25 text-[#6B6155] rounded px-1.5 py-px">
               Archivado
             </span>
           )}
@@ -148,12 +148,12 @@ export default function ProjectOverviewPage({
             {project.clienteNombre}
           </Link>
         </h1>
-        <p className="text-[13px] text-[#B8AEA3] mt-1.5 leading-snug">
+        <p className="text-[13px] text-[#6B6155] mt-1.5 leading-snug">
           {project.domicilioObra.calle} {project.domicilioObra.numero}
           {project.domicilioObra.referencia ? ` · ${project.domicilioObra.referencia}` : ''}
           {' — '}{project.domicilioObra.localidad}
         </p>
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#B8AEA3]/55 mt-1.5">
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155] mt-1.5">
           {project.tipoEspacio.replace(/_/g, ' ')}
           {' · '}
           {project.modalidad.replace(/_/g, ' ')}
@@ -161,7 +161,7 @@ export default function ProjectOverviewPage({
       </div>
 
       {isArchived && (
-        <div className="border border-[#B8AEA3]/20 rounded-md px-4 py-3 text-[12px] text-[#B8AEA3]/70 bg-white">
+        <div className="border border-[#B8AEA3]/20 rounded-md px-4 py-3 text-[12px] text-[#6B6155] bg-white">
           Proyecto archivado · documentos en solo lectura.
         </div>
       )}
@@ -236,7 +236,7 @@ export default function ProjectOverviewPage({
             {project.materialInstalado.tipo} · {project.materialInstalado.descripcion}
           </p>
           {project.materialInstalado.m2Estimados && (
-            <p className="text-[12px] font-mono text-[#B8AEA3] mt-1">
+            <p className="text-[12px] font-mono text-[#6B6155] mt-1">
               {project.materialInstalado.m2Estimados} m²
             </p>
           )}
@@ -254,7 +254,7 @@ export default function ProjectOverviewPage({
           Entregable cliente · PDF
         </Link>
       ) : (
-        <div className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] rounded-md py-3 text-[#B8AEA3]/50" style={{ background: '#f5f2ed' }}>
+        <div className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] rounded-md py-3 text-[#6B6155]" style={{ background: '#f5f2ed' }}>
           Disponible al firmar el acta
         </div>
       )}
@@ -263,7 +263,7 @@ export default function ProjectOverviewPage({
       <Link
         href={`/print/${project.code}`}
         target="_blank"
-        className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] border border-[rgba(43,45,47,0.15)] rounded-md py-3 text-[#B8AEA3]/60 hover:border-[#C38A5A]/40 hover:text-[#C38A5A] transition-colors"
+        className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] border border-[rgba(43,45,47,0.15)] rounded-md py-3 text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] transition-colors"
       >
         Legajo completo · PDF
       </Link>

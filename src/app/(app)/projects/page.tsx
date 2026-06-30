@@ -39,10 +39,10 @@ const IconChevronRight = () => (
 
 /* ── Helpers ─────────────────────────────────────────────── */
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
-  borrador:  { label: 'Borrador',     bg: 'bg-[#B8AEA3]/20', text: 'text-[#B8AEA3]' },
+  borrador:  { label: 'Borrador',     bg: 'bg-[#B8AEA3]/20', text: 'text-[#6B6155]' },
   en_curso:  { label: 'En Curso',     bg: 'bg-[#7BA88A]/20', text: 'text-[#5A8A6A]' },
   entregado: { label: 'Entregado',    bg: 'bg-[#2B2D2F]/10', text: 'text-[#2B2D2F]' },
-  archivado: { label: 'Archivado',    bg: 'bg-[#B8AEA3]/10', text: 'text-[#B8AEA3]/60' },
+  archivado: { label: 'Archivado',    bg: 'bg-[#B8AEA3]/10', text: 'text-[#6B6155]' },
 };
 
 function calcProgress(docStatus: Record<string, DocStatus>): number {
@@ -119,7 +119,7 @@ export default function ProjectsPage() {
             PROYECTOS
           </h1>
           {!loading && (
-            <p className="mt-2 text-[13px] text-[#B8AEA3]">
+            <p className="mt-2 text-[13px] text-[#6B6155]">
               {filtered.length} proyecto{filtered.length !== 1 ? 's' : ''} activo{filtered.length !== 1 ? 's' : ''}
             </p>
           )}
@@ -138,7 +138,7 @@ export default function ProjectsPage() {
       {/* ── Filters ──────────────────────────────────────── */}
       <div className="flex gap-3">
         <div className="relative flex-1 max-w-[480px]">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#B8AEA3]/60 pointer-events-none">
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B6155] pointer-events-none">
             <IconSearch />
           </span>
           <input
@@ -146,7 +146,7 @@ export default function ProjectsPage() {
             placeholder="Buscar por cliente, código o localidad"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full border border-[rgba(43,45,47,0.12)] rounded-md pl-9 pr-4 py-2.5 text-[13px] bg-white placeholder:text-[#B8AEA3]/50 focus:border-[#C38A5A] focus:outline-none transition-colors"
+            className="w-full border border-[rgba(43,45,47,0.12)] rounded-md pl-9 pr-4 py-2.5 text-[13px] bg-white placeholder:text-[#8C8275] focus:border-[#C38A5A] focus:outline-none transition-colors"
           />
         </div>
         <div className="relative">
@@ -162,12 +162,12 @@ export default function ProjectsPage() {
             <option value="entregado">Entregado</option>
             <option value="archivado">Archivado</option>
           </select>
-          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#B8AEA3]/50 pointer-events-none">
+          <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[#6B6155] pointer-events-none">
             <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
               <path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </span>
-          <span className="absolute left-4 top-1/2 -translate-y-1/2 -mt-px text-[11px] font-bold uppercase tracking-[0.18em] text-[#B8AEA3]/60 pointer-events-none">
+          <span className="absolute left-4 top-1/2 -translate-y-1/2 -mt-px text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155] pointer-events-none">
           </span>
         </div>
       </div>
@@ -175,7 +175,7 @@ export default function ProjectsPage() {
       {/* ── Loading ───────────────────────────────────────── */}
       {loading && (
         <div className="py-24 text-center">
-          <span className="text-[11px] font-mono uppercase tracking-[0.28em] text-[#B8AEA3]/50">
+          <span className="text-[11px] font-mono uppercase tracking-[0.28em] text-[#6B6155]">
             Cargando…
           </span>
         </div>
@@ -186,7 +186,7 @@ export default function ProjectsPage() {
         <>
           {filtered.length === 0 ? (
             <div className="py-24 text-center border border-dashed border-[#B8AEA3]/20 rounded-lg">
-              <p className="text-[13px] text-[#B8AEA3]/50">Sin proyectos que coincidan.</p>
+              <p className="text-[13px] text-[#6B6155]">Sin proyectos que coincidan.</p>
             </div>
           ) : (
             <div className="bg-white border border-[rgba(43,45,47,0.09)] rounded-lg overflow-hidden">
@@ -196,7 +196,7 @@ export default function ProjectsPage() {
                     {['Código','Cliente','Estado','Fecha Inicio','Fecha Fin','Progreso','Acciones'].map((col) => (
                       <th
                         key={col}
-                        className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3]/70 whitespace-nowrap"
+                        className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] whitespace-nowrap"
                       >
                         {col}
                       </th>
@@ -241,7 +241,7 @@ export default function ProjectsPage() {
                         </td>
                         {/* Fecha Fin */}
                         <td className="px-5 py-4">
-                          <span className="text-[13px] text-[#B8AEA3]/70">—</span>
+                          <span className="text-[13px] text-[#6B6155]">—</span>
                         </td>
                         {/* Progreso */}
                         <td className="px-5 py-4">
@@ -252,7 +252,7 @@ export default function ProjectsPage() {
                                 style={{ width: `${progress}%` }}
                               />
                             </div>
-                            <span className="text-[12px] text-[#B8AEA3] font-mono w-8">
+                            <span className="text-[12px] text-[#6B6155] font-mono w-8">
                               {progress}%
                             </span>
                           </div>
@@ -263,7 +263,7 @@ export default function ProjectsPage() {
                             {role === 'admin' && (
                               <Link
                                 href={`/projects/${p.code}`}
-                                className="text-[#B8AEA3]/50 hover:text-[#C38A5A] transition-colors"
+                                className="text-[#6B6155] hover:text-[#C38A5A] transition-colors"
                                 title="Editar"
                               >
                                 <IconEdit />
@@ -271,7 +271,7 @@ export default function ProjectsPage() {
                             )}
                             <Link
                               href={`/projects/${p.code}`}
-                              className="text-[#B8AEA3]/50 hover:text-[#C38A5A] transition-colors"
+                              className="text-[#6B6155] hover:text-[#C38A5A] transition-colors"
                               title="Ver"
                             >
                               <IconEye />
@@ -289,25 +289,25 @@ export default function ProjectsPage() {
           {/* ── Table footer ──────────────────────────────── */}
           {filtered.length > 0 && (
             <div className="flex items-center justify-between pt-1">
-              <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3]/50">
+              <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#6B6155]">
                 {filtered.length} Proyecto{filtered.length !== 1 ? 's' : ''}
               </span>
               <div className="flex items-center gap-4">
-                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#B8AEA3]/50">
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155]">
                   Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
                 </span>
                 <div className="flex items-center gap-1">
                   <button
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={page === 0}
-                    className="w-7 h-7 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#B8AEA3]/60 hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+                    className="w-7 h-7 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
                   >
                     <IconChevronLeft />
                   </button>
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                     disabled={page >= totalPages - 1}
-                    className="w-7 h-7 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#B8AEA3]/60 hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+                    className="w-7 h-7 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
                   >
                     <IconChevronRight />
                   </button>

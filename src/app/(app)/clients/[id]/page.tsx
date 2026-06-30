@@ -9,7 +9,7 @@ import { useAuth } from '@/hooks/useAuth';
 import type { Client, Project } from '@/schemas';
 
 const inputCls =
-  'w-full border border-[rgba(43,45,47,0.12)] rounded-md px-4 py-2.5 text-[13px] bg-white placeholder:text-[#B8AEA3]/50 focus:border-[#C38A5A] focus:outline-none transition-colors';
+  'w-full border border-[rgba(43,45,47,0.12)] rounded-md px-4 py-2.5 text-[13px] bg-white placeholder:text-[#8C8275] focus:border-[#C38A5A] focus:outline-none transition-colors';
 
 function newProjectHref(c: Client): string {
   const params = new URLSearchParams();
@@ -22,7 +22,7 @@ function Stat({ value, label }: { value: number; label: string }) {
   return (
     <div className="flex-1 bg-white border border-[rgba(43,45,47,0.08)] rounded-lg px-4 py-3">
       <p className="text-[22px] font-bold text-[#2B2D2F] font-mono leading-none">{value}</p>
-      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#B8AEA3] mt-1.5">{label}</p>
+      <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6155] mt-1.5">{label}</p>
     </div>
   );
 }
@@ -108,7 +108,7 @@ export default function ClientDetailPage({
   if (loading) {
     return (
       <div className="py-20 text-center">
-        <span className="text-[11px] font-mono uppercase tracking-[0.24em] text-[#B8AEA3]/60">Cargando…</span>
+        <span className="text-[11px] font-mono uppercase tracking-[0.24em] text-[#6B6155]">Cargando…</span>
       </div>
     );
   }
@@ -116,7 +116,7 @@ export default function ClientDetailPage({
   if (!client) {
     return (
       <div className="space-y-4">
-        <Link href="/clients" className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.24em] text-[#B8AEA3]/60 hover:text-[#C38A5A] transition-colors">
+        <Link href="/clients" className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.24em] text-[#6B6155] hover:text-[#C38A5A] transition-colors">
           <span className="text-base leading-none">←</span> Clientes
         </Link>
         <p className="text-sm text-red-500">Cliente no encontrado.</p>
@@ -130,7 +130,7 @@ export default function ClientDetailPage({
 
   return (
     <div className="space-y-6">
-      <Link href="/clients" className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.24em] text-[#B8AEA3]/60 hover:text-[#C38A5A] transition-colors">
+      <Link href="/clients" className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.24em] text-[#6B6155] hover:text-[#C38A5A] transition-colors">
         <span className="text-base leading-none">←</span> Clientes
       </Link>
 
@@ -141,7 +141,7 @@ export default function ClientDetailPage({
           <h1 className="text-[26px] font-bold text-[#2B2D2F] leading-tight tracking-tight">
             {client.nombre}
           </h1>
-          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-[#B8AEA3]">
+          <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-[#6B6155]">
             {client.contacto && <span>{client.contacto}</span>}
             {client.telefono && <span>· {client.telefono}</span>}
             {client.email && <span>· {client.email}</span>}
@@ -174,26 +174,26 @@ export default function ClientDetailPage({
       {/* Edit form */}
       {editing && (
         <form onSubmit={handleSave} className="bg-white border border-[rgba(43,45,47,0.10)] rounded-lg p-5 space-y-4">
-          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3]/70 mb-1">Editar datos del cliente</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1">Editar datos del cliente</p>
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#B8AEA3]/70">Nombre <span className="text-[#C38A5A]">*</span></label>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#6B6155]">Nombre <span className="text-[#C38A5A]">*</span></label>
               <input type="text" value={editNombre} onChange={(e) => setEditNombre(e.target.value)} className={inputCls} placeholder="Nombre o razón social" />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#B8AEA3]/70">Contacto</label>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#6B6155]">Contacto</label>
               <input type="text" value={editContacto} onChange={(e) => setEditContacto(e.target.value)} className={inputCls} placeholder="Nombre del contacto" />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#B8AEA3]/70">Teléfono</label>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#6B6155]">Teléfono</label>
               <input type="text" value={editTelefono} onChange={(e) => setEditTelefono(e.target.value)} className={inputCls} placeholder="11-1234-5678" />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#B8AEA3]/70">Email</label>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#6B6155]">Email</label>
               <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} className={inputCls} placeholder="email@ejemplo.com" />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#B8AEA3]/70">DNI / CUIT</label>
+              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#6B6155]">DNI / CUIT</label>
               <input type="text" value={editDniCuit} onChange={(e) => setEditDniCuit(e.target.value)} className={inputCls} placeholder="20-12345678-9" />
             </div>
           </div>
@@ -209,7 +209,7 @@ export default function ClientDetailPage({
             <button
               type="button"
               onClick={() => setEditing(false)}
-              className="px-5 py-2 rounded border border-[rgba(43,45,47,0.15)] text-[#B8AEA3] text-[11px] font-bold uppercase tracking-[0.18em] hover:border-[#B8AEA3]/40 transition-colors cursor-pointer"
+              className="px-5 py-2 rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] text-[11px] font-bold uppercase tracking-[0.18em] hover:border-[#B8AEA3]/40 transition-colors cursor-pointer"
             >
               Cancelar
             </button>
@@ -228,7 +228,7 @@ export default function ClientDetailPage({
       {/* Projects */}
       {projects.length === 0 ? (
         <div className="py-16 text-center border border-dashed border-[#B8AEA3]/20 rounded-lg">
-          <p className="text-[13px] text-[#B8AEA3]/50">Sin proyectos todavía.</p>
+          <p className="text-[13px] text-[#6B6155]">Sin proyectos todavía.</p>
         </div>
       ) : (
         <div>
@@ -238,7 +238,7 @@ export default function ClientDetailPage({
               <thead>
                 <tr className="border-b border-[rgba(43,45,47,0.07)]">
                   {['Código','Estado','Domicilio de obra','Progreso','Inicio'].map((col) => (
-                    <th key={col} className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3]/70 whitespace-nowrap">
+                    <th key={col} className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] whitespace-nowrap">
                       {col}
                     </th>
                   ))}
@@ -269,11 +269,11 @@ export default function ClientDetailPage({
                           <div className="w-24 h-1.5 bg-[#B8AEA3]/20 rounded-full overflow-hidden">
                             <div className="h-full bg-[#6B8FA3] rounded-full" style={{ width: `${progress}%` }} />
                           </div>
-                          <span className="text-[12px] text-[#B8AEA3] font-mono w-8">{progress}%</span>
+                          <span className="text-[12px] text-[#6B6155] font-mono w-8">{progress}%</span>
                         </div>
                       </td>
                       <td className="px-5 py-4">
-                        <span className="text-[13px] text-[#B8AEA3]/70">{fmtDate(p.createdAt)}</span>
+                        <span className="text-[13px] text-[#6B6155]">{fmtDate(p.createdAt)}</span>
                       </td>
                     </tr>
                   );

@@ -115,7 +115,7 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
   }
 
   const inputCls = `w-full border rounded-md px-3 py-2.5 text-sm focus:border-[#C38A5A] focus:outline-none transition-colors ${isLocked ? 'opacity-50 pointer-events-none bg-[#111] border-[#333] text-[#B8AEA3]' : 'bg-[#111] border-[#2A2A2A] text-[#F5F2ED]'}`;
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#B8AEA3] mb-1.5';
+  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
 
   // Campos heredados readonly desde VT
   const roFields = seed.readonly;
@@ -124,7 +124,7 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
     <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
       <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-[#B8AEA3] capitalize">{ep?.status ?? 'vacio'}</span>
+        <span className="text-xs font-mono text-[#6B6155] capitalize">{ep?.status ?? 'vacio'}</span>
         <SaveIndicator state={saveState} />
       </div>
 
@@ -140,9 +140,9 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
       <div className="bg-[#F5F2ED] border border-[rgba(43,45,47,0.08)] rounded-lg px-4 py-3 space-y-2">
         <p className="eyebrow">Datos de VT · Solo lectura</p>
         <div className="grid grid-cols-3 gap-3 text-sm">
-          <div><p className="text-xs text-[#B8AEA3]">Estado soporte</p><p className="font-medium capitalize">{String(roFields.estadoSoporte || '—')}</p></div>
-          <div><p className="text-xs text-[#B8AEA3]">Material soporte</p><p className="font-medium capitalize">{String(roFields.materialSoporte || '—')}</p></div>
-          <div><p className="text-xs text-[#B8AEA3]">Dictamen VT</p><p className="font-medium capitalize">{String(roFields.dictamen || '—').replace('_', ' ')}</p></div>
+          <div><p className="text-xs text-[#6B6155]">Estado soporte</p><p className="font-medium capitalize">{String(roFields.estadoSoporte || '—')}</p></div>
+          <div><p className="text-xs text-[#6B6155]">Material soporte</p><p className="font-medium capitalize">{String(roFields.materialSoporte || '—')}</p></div>
+          <div><p className="text-xs text-[#6B6155]">Dictamen VT</p><p className="font-medium capitalize">{String(roFields.dictamen || '—').replace('_', ' ')}</p></div>
         </div>
       </div>
 
@@ -247,11 +247,11 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
         {reparaciones.map((field, i) => (
           <div key={field.id} className="flex gap-2 items-end">
             <div className="flex-1">
-              <label htmlFor={`reparacion-${i}-zona`} className="text-xs text-[#B8AEA3] block mb-0.5">Zona</label>
+              <label htmlFor={`reparacion-${i}-zona`} className="text-xs text-[#6B6155] block mb-0.5">Zona</label>
               <input id={`reparacion-${i}-zona`} {...register(`reparacionesPrevias.${i}.zona`)} className={inputCls} disabled={isLocked} />
             </div>
             <div className="flex-1">
-              <label htmlFor={`reparacion-${i}-accion`} className="text-xs text-[#B8AEA3] block mb-0.5">Acción</label>
+              <label htmlFor={`reparacion-${i}-accion`} className="text-xs text-[#6B6155] block mb-0.5">Acción</label>
               <input id={`reparacion-${i}-accion`} {...register(`reparacionesPrevias.${i}.accion`)} className={inputCls} disabled={isLocked} />
             </div>
             {!isLocked && (

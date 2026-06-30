@@ -21,7 +21,7 @@ export function ConfirmDialog({ open, message, onConfirm, onCancel }: Props) {
         <div className="flex gap-3 justify-end">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#B8AEA3] border border-[rgba(43,45,47,0.15)] rounded hover:border-[#C38A5A]/40 hover:text-[#C38A5A] transition-colors"
+            className="px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6155] border border-[rgba(43,45,47,0.15)] rounded hover:border-[#C38A5A]/40 hover:text-[#C38A5A] transition-colors"
           >
             Cancelar
           </button>
