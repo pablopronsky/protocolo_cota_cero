@@ -106,8 +106,8 @@ export default function FMForm({ projectCode, project, upstream, docData }: Prop
     } finally { setLocking(false); }
   }
 
-  const inputCls = `w-full border rounded-md px-3 py-2.5 text-sm focus:border-[#C38A5A] focus:outline-none transition-colors ${isLocked ? 'opacity-50 pointer-events-none bg-[#111] border-[#333] text-[#B8AEA3]' : 'bg-[#111] border-[#2A2A2A] text-[#F5F2ED]'}`;
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
+  const inputCls = `w-full border rounded-md px-3 py-2.5 text-[14px] focus:border-[#C38A5A] focus:outline-none transition-colors ${isLocked ? 'opacity-60 pointer-events-none bg-[#F0EDE7] border-[rgba(43,45,47,0.12)] text-[#6B6155]' : 'bg-white border-[rgba(43,45,47,0.18)] text-[#2B2D2F]'}`;
+  const labelCls = 'block text-[13px] font-semibold text-[#6B6155] mb-1.5';
   const materialInstalado = ro.materialInstalado as typeof project.materialInstalado | undefined;
 
   return (

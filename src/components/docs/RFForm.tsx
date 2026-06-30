@@ -37,7 +37,7 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
   const isLocked = rf?.status === 'completo' || rf?.status === 'firmado';
   const [locking, setLocking] = useState(false);
   const [lockErrors, setLockErrors] = useState<string[]>([]);
-  const { confirmOpen, confirmMessage, openConfirm, onConfirm, onCancel } = useConfirm();
+  const { confirmOpen, confirmMessage, confirmDanger, openConfirm, onConfirm, onCancel } = useConfirm();
   const [photoPreviews, setPhotoPreviews] = useState<Map<string, string>>(new Map());
   const [photoError, setPhotoError] = useState<string | null>(null);
   const { template, loading: tplLoading } = useProtocolTemplate();
@@ -133,7 +133,7 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
   }
 
   async function removePhoto(id: string) {
-    if (!await openConfirm('¿Eliminar esta foto?')) return;
+    if (!await openConfirm('¿Eliminar esta foto?', { danger: true })) return;
     const livePhotos = (liveDoc as import('@/schemas').DocRF | null)?.registroFotografico ?? [];
     const photo = livePhotos.find((p) => p.id === id);
     if (!photo) return;
@@ -147,8 +147,8 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
     });
   }
 
-  const inputCls = `w-full border rounded-md px-3 py-2.5 text-sm focus:border-[#C38A5A] focus:outline-none transition-colors ${isLocked ? 'opacity-50 pointer-events-none bg-[#111] border-[#333] text-[#B8AEA3]' : 'bg-[#111] border-[#2A2A2A] text-[#F5F2ED]'}`;
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
+  const inputCls = `w-full border rounded-md px-3 py-2.5 text-[14px] focus:border-[#C38A5A] focus:outline-none transition-colors ${isLocked ? 'opacity-60 pointer-events-none bg-[#F0EDE7] border-[rgba(43,45,47,0.12)] text-[#6B6155]' : 'bg-white border-[rgba(43,45,47,0.18)] text-[#2B2D2F]'}`;
+  const labelCls = 'block text-[13px] font-semibold text-[#6B6155] mb-1.5';
   const ro = seed.readonly as Record<string, unknown>;
 
   return (
@@ -220,7 +220,7 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
               <option value="observado">Observado</option>
               <option value="rehacer">Rehacer</option>
             </select>
-            {!isLocked && <button type="button" onClick={() => removeCheck(i)} className="text-red-400 text-sm">✕</button>}
+            {!isLocked && <button type="button" onClick={() => removeCheck(i)} aria-label="Eliminar ítem" className="p-1.5 -m-1.5 text-red-400 text-sm">✕</button>}
           </div>
         ))}
         {!isLocked && (
@@ -283,7 +283,7 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
         </button>
       )}
     </form>
-      <ConfirmDialog open={confirmOpen} message={confirmMessage} onConfirm={onConfirm} onCancel={onCancel} />
+      <ConfirmDialog open={confirmOpen} message={confirmMessage} danger={confirmDanger} onConfirm={onConfirm} onCancel={onCancel} />
     </>
   );
 }

@@ -41,7 +41,7 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
   const clienteYaFirmo = !!liveAC?.firmaCliente?.firma;
   const actaCongelada = !isSigned && (frozen || clienteYaFirmo);
   const contentLocked = isLocked || actaCongelada;
-  const { confirmOpen, confirmMessage, openConfirm, onConfirm, onCancel } = useConfirm();
+  const { confirmOpen, confirmMessage, confirmDanger, openConfirm, onConfirm, onCancel } = useConfirm();
   // Blobs locales para preview de firmas; no se persisten en RHF ni Firestore.
   const [firmaClienteBlob, setFirmaClienteBlob] = useState<string | null>(null);
   const [firmaCotaCeroBlob, setFirmaCotaCeroBlob] = useState<string | null>(null);
@@ -128,7 +128,7 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
   // #22 — Descarta la firma del cliente y reabre la edición del acta. Cancela la
   // firma encolada para que un flush posterior no la resucite.
   async function handleDiscardFirma() {
-    if (!await openConfirm('¿Descartar la firma del cliente y volver a editar el acta?')) return;
+    if (!await openConfirm('¿Descartar la firma del cliente y volver a editar el acta?', { danger: true })) return;
     try {
       await cancelQueuedSignature(projectCode, 'AC', 'firmaCliente.firma');
       await saveDoc(projectCode, 'AC', {
@@ -193,8 +193,8 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
     } finally { setLocking(false); }
   }
 
-  const inputCls = `w-full border rounded-md px-3 py-2.5 text-sm focus:border-[#C38A5A] focus:outline-none transition-colors ${contentLocked ? 'opacity-50 pointer-events-none bg-[#111] border-[#333] text-[#B8AEA3]' : 'bg-[#111] border-[#2A2A2A] text-[#F5F2ED]'}`;
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
+  const inputCls = `w-full border rounded-md px-3 py-2.5 text-[14px] focus:border-[#C38A5A] focus:outline-none transition-colors ${contentLocked ? 'opacity-60 pointer-events-none bg-[#F0EDE7] border-[rgba(43,45,47,0.12)] text-[#6B6155]' : 'bg-white border-[rgba(43,45,47,0.18)] text-[#2B2D2F]'}`;
+  const labelCls = 'block text-[13px] font-semibold text-[#6B6155] mb-1.5';
 
   const clienteData = ro.cliente as { nombre?: string } | undefined;
   const domicilio = ro.domicilioObra as typeof project.domicilioObra | undefined;
@@ -324,7 +324,7 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
         </button>
       )}
     </form>
-      <ConfirmDialog open={confirmOpen} message={confirmMessage} onConfirm={onConfirm} onCancel={onCancel} />
+      <ConfirmDialog open={confirmOpen} message={confirmMessage} danger={confirmDanger} onConfirm={onConfirm} onCancel={onCancel} />
     </>
   );
 }

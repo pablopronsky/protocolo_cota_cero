@@ -74,7 +74,7 @@ function AmbienteVarillas({ control, register, nestIndex, isLocked, inputCls }: 
             disabled={isLocked}
           />
           {!isLocked && (
-            <button type="button" onClick={() => remove(j)} className="text-red-400 text-sm shrink-0">✕</button>
+            <button type="button" onClick={() => remove(j)} aria-label="Eliminar varilla" className="p-1.5 -m-1.5 text-red-400 text-sm shrink-0">✕</button>
           )}
         </div>
       ))}
@@ -117,7 +117,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
   const isLocked = vt?.status === 'completo' || vt?.status === 'firmado';
   const [locking, setLocking] = useState(false);
   const [lockErrors, setLockErrors] = useState<string[]>([]);
-  const { confirmOpen, confirmMessage, openConfirm, onConfirm, onCancel } = useConfirm();
+  const { confirmOpen, confirmMessage, confirmDanger, openConfirm, onConfirm, onCancel } = useConfirm();
   const { template, loading: tplLoading } = useProtocolTemplate();
   const seededRef = useRef(false);
   // Preview local de fotos: Map<id, objectURL>. No se persiste en RHF ni Firestore.
@@ -231,7 +231,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
   }
 
   async function removePhoto(id: string) {
-    if (!await openConfirm('¿Eliminar esta foto?')) return;
+    if (!await openConfirm('¿Eliminar esta foto?', { danger: true })) return;
     const livePhotos = (liveDoc as import('@/schemas').DocVT | null)?.registroFotografico ?? [];
     const photo = livePhotos.find((p) => p.id === id);
     if (!photo) return;
@@ -245,8 +245,8 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
     });
   }
 
-  const inputCls = `w-full border rounded-md px-3 py-2.5 text-sm focus:border-[#C38A5A] focus:outline-none transition-colors ${isLocked ? 'opacity-50 pointer-events-none bg-[#111] border-[#333] text-[#B8AEA3]' : 'bg-[#111] border-[#2A2A2A] text-[#F5F2ED]'}`;
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
+  const inputCls = `w-full border rounded-md px-3 py-2.5 text-[14px] focus:border-[#C38A5A] focus:outline-none transition-colors ${isLocked ? 'opacity-60 pointer-events-none bg-[#F0EDE7] border-[rgba(43,45,47,0.12)] text-[#6B6155]' : 'bg-white border-[rgba(43,45,47,0.18)] text-[#2B2D2F]'}`;
+  const labelCls = 'block text-[13px] font-semibold text-[#6B6155] mb-1.5';
 
   return (
     <>
@@ -325,7 +325,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
                   <input id={`ambientes-${i}-zocalo`} type="number" inputMode="decimal" {...register(`ambientes.${i}.zocaloMl`, { valueAsNumber: true })} className={inputCls} disabled={isLocked} />
                 </div>
                 {!isLocked && (
-                  <button type="button" onClick={() => removeAmbiente(i)} className="text-red-400 text-sm pb-3 shrink-0">✕</button>
+                  <button type="button" onClick={() => removeAmbiente(i)} aria-label="Eliminar ambiente" className="p-1.5 -m-1.5 mb-1.5 text-red-400 text-sm shrink-0">✕</button>
                 )}
               </div>
               <AmbienteVarillas control={control} register={register} nestIndex={i} isLocked={isLocked} inputCls={inputCls} />
@@ -471,7 +471,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
         </button>
       )}
     </form>
-      <ConfirmDialog open={confirmOpen} message={confirmMessage} onConfirm={onConfirm} onCancel={onCancel} />
+      <ConfirmDialog open={confirmOpen} message={confirmMessage} danger={confirmDanger} onConfirm={onConfirm} onCancel={onCancel} />
     </>
   );
 }

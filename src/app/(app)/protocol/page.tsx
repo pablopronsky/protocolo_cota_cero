@@ -124,8 +124,8 @@ export default function ProtocolPage() {
   }
 
   const inputCls =
-    'w-full border rounded-md px-3 py-2.5 text-sm focus:border-[#C38A5A] focus:outline-none transition-colors bg-[#111] border-[#2A2A2A] text-[#F5F2ED]';
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
+    'w-full border rounded-md px-3 py-2.5 text-[14px] focus:border-[#C38A5A] focus:outline-none transition-colors bg-white border-[rgba(43,45,47,0.18)] text-[#2B2D2F]';
+  const labelCls = 'block text-[13px] font-semibold text-[#6B6155] mb-1.5';
   const checkboxGridCls = 'grid grid-cols-2 gap-y-2.5 gap-x-4';
   const checkboxLabelCls = 'flex items-center gap-2.5 text-sm capitalize';
 

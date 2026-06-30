@@ -40,7 +40,7 @@ const IconChevronRight = () => (
 /* ── Helpers ─────────────────────────────────────────────── */
 const STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
   borrador:  { label: 'Borrador',     bg: 'bg-[#B8AEA3]/20', text: 'text-[#6B6155]' },
-  en_curso:  { label: 'En Curso',     bg: 'bg-[#7BA88A]/20', text: 'text-[#5A8A6A]' },
+  en_curso:  { label: 'En Curso',     bg: 'bg-[#C38A5A]/18', text: 'text-[#9C5F2E]' },
   entregado: { label: 'Entregado',    bg: 'bg-[#2B2D2F]/10', text: 'text-[#2B2D2F]' },
   archivado: { label: 'Archivado',    bg: 'bg-[#B8AEA3]/10', text: 'text-[#6B6155]' },
 };
@@ -193,7 +193,7 @@ export default function ProjectsPage() {
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-[rgba(43,45,47,0.07)]">
-                    {['Código','Cliente','Estado','Fecha Inicio','Fecha Fin','Progreso','Acciones'].map((col) => (
+                    {['Código','Cliente','Estado','Fecha Inicio','Progreso','Acciones'].map((col) => (
                       <th
                         key={col}
                         className="px-5 py-3.5 text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] whitespace-nowrap"
@@ -239,16 +239,12 @@ export default function ProjectsPage() {
                             {fmtDate(p.createdAt)}
                           </span>
                         </td>
-                        {/* Fecha Fin */}
-                        <td className="px-5 py-4">
-                          <span className="text-[13px] text-[#6B6155]">—</span>
-                        </td>
                         {/* Progreso */}
                         <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
                             <div className="w-24 h-1.5 bg-[#B8AEA3]/20 rounded-full overflow-hidden">
                               <div
-                                className="h-full bg-[#6B8FA3] rounded-full transition-all"
+                                className="h-full bg-[#C38A5A] rounded-full transition-all"
                                 style={{ width: `${progress}%` }}
                               />
                             </div>
@@ -259,20 +255,22 @@ export default function ProjectsPage() {
                         </td>
                         {/* Acciones */}
                         <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-3">
+                          <div className="flex items-center gap-1">
                             {role === 'admin' && (
                               <Link
                                 href={`/projects/${p.code}`}
-                                className="text-[#6B6155] hover:text-[#C38A5A] transition-colors"
+                                className="p-2.5 -m-2.5 text-[#6B6155] hover:text-[#C38A5A] transition-colors"
                                 title="Editar"
+                                aria-label={`Editar proyecto ${p.code}`}
                               >
                                 <IconEdit />
                               </Link>
                             )}
                             <Link
                               href={`/projects/${p.code}`}
-                              className="text-[#6B6155] hover:text-[#C38A5A] transition-colors"
+                              className="p-2.5 -m-2.5 text-[#6B6155] hover:text-[#C38A5A] transition-colors"
                               title="Ver"
+                              aria-label={`Ver proyecto ${p.code}`}
                             >
                               <IconEye />
                             </Link>
@@ -300,14 +298,16 @@ export default function ProjectsPage() {
                   <button
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={page === 0}
-                    className="w-7 h-7 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+                    aria-label="Página anterior"
+                    className="w-11 h-11 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
                   >
                     <IconChevronLeft />
                   </button>
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                     disabled={page >= totalPages - 1}
-                    className="w-7 h-7 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+                    aria-label="Página siguiente"
+                    className="w-11 h-11 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
                   >
                     <IconChevronRight />
                   </button>

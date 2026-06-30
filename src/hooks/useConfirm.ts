@@ -4,12 +4,14 @@ import { useState, useRef, useCallback } from 'react';
 export function useConfirm() {
   const [open, setOpen] = useState(false);
   const [message, setMessage] = useState('');
+  const [danger, setDanger] = useState(false);
   const resolveRef = useRef<((v: boolean) => void) | null>(null);
 
-  const openConfirm = useCallback((msg: string): Promise<boolean> => {
+  const openConfirm = useCallback((msg: string, opts?: { danger?: boolean }): Promise<boolean> => {
     return new Promise((resolve) => {
       resolveRef.current = resolve;
       setMessage(msg);
+      setDanger(!!opts?.danger);
       setOpen(true);
     });
   }, []);
@@ -26,5 +28,5 @@ export function useConfirm() {
     setOpen(false);
   }, []);
 
-  return { confirmOpen: open, confirmMessage: message, openConfirm, onConfirm, onCancel };
+  return { confirmOpen: open, confirmMessage: message, confirmDanger: danger, openConfirm, onConfirm, onCancel };
 }

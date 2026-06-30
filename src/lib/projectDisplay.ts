@@ -5,7 +5,7 @@ import { DOC_ORDER } from '@/schemas';
 // proyectos y las vistas de clientes para mantener una sola fuente de verdad.
 export const PROJECT_STATUS_BADGE: Record<string, { label: string; bg: string; text: string }> = {
   borrador:  { label: 'Borrador',  bg: 'bg-[#B8AEA3]/20', text: 'text-[#6B6155]' },
-  en_curso:  { label: 'En Curso',  bg: 'bg-[#7BA88A]/20', text: 'text-[#5A8A6A]' },
+  en_curso:  { label: 'En Curso',  bg: 'bg-[#C38A5A]/18', text: 'text-[#9C5F2E]' },
   entregado: { label: 'Entregado', bg: 'bg-[#2B2D2F]/10', text: 'text-[#2B2D2F]' },
   archivado: { label: 'Archivado', bg: 'bg-[#B8AEA3]/10', text: 'text-[#6B6155]' },
 };

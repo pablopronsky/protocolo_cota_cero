@@ -148,7 +148,7 @@ export default function ClientDetailPage({
             {client.dni_cuit && <span className="font-mono">· {client.dni_cuit}</span>}
           </div>
           {savedOk && (
-            <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[#7BA88A]">Guardado</p>
+            <p className="mt-1 text-[11px] font-bold uppercase tracking-[0.18em] text-[#C38A5A]">Guardado</p>
           )}
         </div>
         <div className="shrink-0 flex items-center gap-2 mt-1">
@@ -177,23 +177,23 @@ export default function ClientDetailPage({
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1">Editar datos del cliente</p>
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#6B6155]">Nombre <span className="text-[#C38A5A]">*</span></label>
+              <label className="block text-[13px] font-semibold text-[#6B6155]">Nombre <span className="text-[#C38A5A]">*</span></label>
               <input type="text" value={editNombre} onChange={(e) => setEditNombre(e.target.value)} className={inputCls} placeholder="Nombre o razón social" />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#6B6155]">Contacto</label>
+              <label className="block text-[13px] font-semibold text-[#6B6155]">Contacto</label>
               <input type="text" value={editContacto} onChange={(e) => setEditContacto(e.target.value)} className={inputCls} placeholder="Nombre del contacto" />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#6B6155]">Teléfono</label>
+              <label className="block text-[13px] font-semibold text-[#6B6155]">Teléfono</label>
               <input type="text" value={editTelefono} onChange={(e) => setEditTelefono(e.target.value)} className={inputCls} placeholder="11-1234-5678" />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#6B6155]">Email</label>
+              <label className="block text-[13px] font-semibold text-[#6B6155]">Email</label>
               <input type="email" value={editEmail} onChange={(e) => setEditEmail(e.target.value)} className={inputCls} placeholder="email@ejemplo.com" />
             </div>
             <div className="space-y-1.5">
-              <label className="block text-[10px] font-bold uppercase tracking-[0.20em] text-[#6B6155]">DNI / CUIT</label>
+              <label className="block text-[13px] font-semibold text-[#6B6155]">DNI / CUIT</label>
               <input type="text" value={editDniCuit} onChange={(e) => setEditDniCuit(e.target.value)} className={inputCls} placeholder="20-12345678-9" />
             </div>
           </div>
@@ -267,7 +267,7 @@ export default function ClientDetailPage({
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
                           <div className="w-24 h-1.5 bg-[#B8AEA3]/20 rounded-full overflow-hidden">
-                            <div className="h-full bg-[#6B8FA3] rounded-full" style={{ width: `${progress}%` }} />
+                            <div className="h-full bg-[#C38A5A] rounded-full" style={{ width: `${progress}%` }} />
                           </div>
                           <span className="text-[12px] text-[#6B6155] font-mono w-8">{progress}%</span>
                         </div>

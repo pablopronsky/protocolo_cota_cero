@@ -171,7 +171,7 @@ export default function ClientsPage() {
                         <div className="flex items-center gap-2">
                           <span className="text-[14px] font-bold text-[#2B2D2F] font-mono">{c.projectCount}</span>
                           {c.activeCount > 0 && (
-                            <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] px-2 py-0.5 rounded-sm bg-[#7BA88A]/20 text-[#5A8A6A]">
+                            <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] px-2 py-0.5 rounded-sm bg-[#C38A5A]/18 text-[#9C5F2E]">
                               {c.activeCount} activo{c.activeCount !== 1 ? 's' : ''}
                             </span>
                           )}
@@ -200,14 +200,16 @@ export default function ClientsPage() {
                   <button
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={page === 0}
-                    className="w-7 h-7 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+                    aria-label="Página anterior"
+                    className="w-11 h-11 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
                   >
                     <IconChevronLeft />
                   </button>
                   <button
                     onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                     disabled={page >= totalPages - 1}
-                    className="w-7 h-7 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+                    aria-label="Página siguiente"
+                    className="w-11 h-11 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
                   >
                     <IconChevronRight />
                   </button>

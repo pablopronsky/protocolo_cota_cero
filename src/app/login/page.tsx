@@ -358,7 +358,7 @@ export default function LoginPage() {
                         <input
                           id="email" type="email" value={email}
                           onChange={(e) => setEmail(e.target.value)}
-                          required autoComplete="email"
+                          required autoComplete="email" autoFocus
                           placeholder="tu@email.com"
                           className="cc-input"
                           style={INPUT}

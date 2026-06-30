@@ -1,6 +1,6 @@
 'use client';
 
-import { use } from 'react';
+import { use, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useProject } from '@/hooks/useProject';
@@ -67,7 +67,8 @@ export default function ProjectOverviewPage({
   const { project, docs, loading } = useProject(code);
   const { role, user } = useAuth();
   const router = useRouter();
-  const { confirmOpen, confirmMessage, openConfirm, onConfirm, onCancel } = useConfirm();
+  const { confirmOpen, confirmMessage, confirmDanger, openConfirm, onConfirm, onCancel } = useConfirm();
+  const [actionError, setActionError] = useState<string | null>(null);
 
   if (loading) {
     return (
@@ -90,13 +91,14 @@ export default function ProjectOverviewPage({
     if (isArchived) {
       await unarchiveProject(project.code);
     } else {
-      if (!await openConfirm('¿Archivar este proyecto? Quedará en solo lectura.')) return;
+      if (!await openConfirm('¿Archivar este proyecto? Quedará en solo lectura.', { danger: true })) return;
       await archiveProject(project.code);
     }
   }
 
   async function handleDuplicate() {
     if (!project || !user) return;
+    setActionError(null);
     const token = await user.getIdToken();
     const res = await fetch('/api/projects/duplicate', {
       method: 'POST',
@@ -111,7 +113,7 @@ export default function ProjectOverviewPage({
       router.push(`/projects/${newCode}`);
     } else {
       const data = await res.json().catch(() => ({}));
-      alert(data.error ?? 'No se pudo duplicar el proyecto.');
+      setActionError(data.error ?? 'No se pudo duplicar el proyecto.');
     }
   }
 
@@ -166,6 +168,12 @@ export default function ProjectOverviewPage({
         </div>
       )}
 
+      {actionError && (
+        <div className="border border-red-300/50 bg-red-50 rounded-md px-4 py-3 text-[13px] text-red-500">
+          {actionError}
+        </div>
+      )}
+
       {/* Protocol steps */}
       <div>
         <p className="eyebrow mb-3">Protocolo de obra</p>
@@ -177,12 +185,16 @@ export default function ProjectOverviewPage({
             const upstreamEmpty =
               i > 0 && (project.docStatus?.[DOC_ORDER[i - 1]] ?? 'vacio') === 'vacio';
 
+            const isBlocked = isArchived || (upstreamEmpty && status === 'vacio');
+
             return (
               <Link
                 key={docType}
-                href={isArchived ? '#' : `/projects/${project.code}/${docType}`}
+                href={isBlocked ? '#' : `/projects/${project.code}/${docType}`}
+                aria-disabled={isBlocked}
+                tabIndex={isBlocked ? -1 : undefined}
                 className={`block border rounded-lg px-4 py-3 transition-all duration-150 ${cfg.rowCls} ${
-                  isArchived ? 'pointer-events-none opacity-50' : 'cursor-pointer'
+                  isBlocked ? 'pointer-events-none opacity-50' : 'cursor-pointer'
                 }`}
               >
                 <div className="flex items-center gap-3">
@@ -286,7 +298,7 @@ export default function ProjectOverviewPage({
         </div>
       )}
     </div>
-      <ConfirmDialog open={confirmOpen} message={confirmMessage} onConfirm={onConfirm} onCancel={onCancel} />
+      <ConfirmDialog open={confirmOpen} message={confirmMessage} danger={confirmDanger} onConfirm={onConfirm} onCancel={onCancel} />
     </>
   );
 }

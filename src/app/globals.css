@@ -45,8 +45,8 @@ input, select, textarea {
 
 input[type="checkbox"],
 input[type="radio"] {
-  width: 1rem;
-  height: 1rem;
+  width: 1.125rem;
+  height: 1.125rem;
   cursor: pointer;
   accent-color: #C38A5A;
 }
@@ -86,12 +86,12 @@ input[type="radio"] {
 /* ── Field input base ───────────────────────────────────── */
 .field-input {
   width: 100%;
-  border: 1px solid #2A2A2A;
+  border: 1px solid rgba(43,45,47,0.18);
   border-radius: 0.375rem;
   padding: 0.5rem 0.75rem;
-  background: #111;
-  font-size: 0.8125rem;
-  color: #F5F2ED;
+  background: #fff;
+  font-size: 0.875rem;
+  color: #2B2D2F;
   transition: border-color 0.15s;
   line-height: 1.4;
 }
@@ -101,9 +101,10 @@ input[type="radio"] {
 }
 .field-input:disabled,
 .field-input.is-locked {
-  opacity: 0.5;
+  opacity: 0.6;
   pointer-events: none;
-  background: #0A0A0A;
+  background: #F0EDE7;
+  color: #6B6155;
 }
 
 /* ── Print ──────────────────────────────────────────────── */

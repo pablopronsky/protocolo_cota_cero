@@ -33,7 +33,7 @@ function ClientPicker({ selected, onSelect }: ClientPickerProps) {
       })
     : clients.slice(0, 6);
 
-  const labelCls = 'block text-[10px] font-bold uppercase tracking-[0.22em] text-[#6B6155] mb-1.5';
+  const labelCls = 'block text-[13px] font-semibold text-[#6B6155] mb-1.5';
   const inputCls = 'w-full border border-[rgba(43,45,47,0.18)] rounded-md px-3 py-2.5 bg-white text-sm text-[#2B2D2F] placeholder:text-[#8C8275] focus:border-[#C38A5A] focus:outline-none transition-colors';
 
   if (selected) {
@@ -67,6 +67,7 @@ function ClientPicker({ selected, onSelect }: ClientPickerProps) {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             className={inputCls}
+            autoFocus
           />
           {filtered.length > 0 && (
             <div className="border border-[rgba(43,45,47,0.12)] rounded-lg overflow-hidden">
@@ -240,12 +241,12 @@ function NewProjectForm() {
       {children}
     </select>
   );
-  const labelCls = 'block text-[15px] font-bold uppercase tracking-[0.16em] text-[#6B6155] mb-1.5';
+  const labelCls = 'block text-[13px] font-semibold text-[#6B6155] mb-1.5';
 
   return (
     <div className="space-y-5 pb-10">
       <div>
-        <a href="/projects" className="text-[15px] font-bold uppercase tracking-[0.2em] text-[#6B6155] hover:text-[#C38A5A] transition-colors">
+        <a href="/projects" className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#6B6155] hover:text-[#C38A5A] transition-colors">
           ← Proyectos
         </a>
         <h1 className="text-xl font-bold text-[#2B2D2F] mt-1.5">Nuevo proyecto</h1>
@@ -361,20 +362,20 @@ function NewProjectForm() {
           </div>
         </div>
 
-        {error && <p className="text-[16px] font-mono text-red-500">{error}</p>}
+        {error && <p className="text-[13px] text-red-500">{error}</p>}
 
         <div className="flex gap-3 pt-1">
           <button
             type="button"
             onClick={() => router.back()}
-            className="flex-1 border border-[rgba(43,45,47,0.18)] rounded-md py-3 text-[15px] font-bold uppercase tracking-[0.14em] text-[#2B2D2F] hover:border-[#C38A5A]/50 transition-colors"
+            className="flex-1 border border-[rgba(43,45,47,0.18)] rounded-md py-3.5 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2B2D2F] hover:border-[#C38A5A]/50 transition-colors"
           >
             Cancelar
           </button>
           <button
             type="submit"
             disabled={loading}
-            className="flex-1 bg-[#2B2D2F] text-[#F5F2ED] rounded-md py-3 text-[15px] font-bold uppercase tracking-[0.14em] hover:bg-[#1F1F1F] disabled:opacity-50 transition-colors"
+            className="flex-1 bg-[#2B2D2F] text-[#F5F2ED] rounded-md py-3.5 text-[11px] font-bold uppercase tracking-[0.22em] hover:bg-[#1F1F1F] disabled:opacity-50 transition-colors"
           >
             {loading ? 'Creando…' : 'Crear proyecto'}
           </button>

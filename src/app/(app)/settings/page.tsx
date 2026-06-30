@@ -49,7 +49,7 @@ export default function SettingsPage() {
             </div>
             <div className="flex items-center gap-2 shrink-0">
               <span
-                className={`text-[14px] font-bold uppercase tracking-[0.14em] border rounded px-2 py-px ${
+                className={`text-[11px] font-bold uppercase tracking-[0.14em] border rounded px-2 py-px ${
                   u.role === 'admin'
                     ? 'bg-[#2B2D2F] text-[#C38A5A] border-[#2B2D2F]'
                     : 'text-[#6B6155] border-[#B8AEA3]/35'
@@ -58,7 +58,7 @@ export default function SettingsPage() {
                 {u.role}
               </span>
               {!u.activo && (
-                <span className="text-[14px] font-bold uppercase tracking-[0.14em] text-red-400">
+                <span className="text-[11px] font-bold uppercase tracking-[0.14em] text-red-500">
                   Inactivo
                 </span>
               )}
