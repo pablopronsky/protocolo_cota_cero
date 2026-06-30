@@ -61,7 +61,7 @@ function NavItem({
   active: boolean;
   disabled?: boolean;
 }) {
-  const cls = `flex items-center gap-2.5 px-3 py-2 rounded-sm text-[11px] font-bold uppercase tracking-[0.2em] transition-colors duration-150 ${
+  const cls = `flex items-center gap-2.5 px-3 py-2 rounded-sm text-[11px] font-bold uppercase tracking-wide transition-colors duration-150 ${
     disabled
       ? 'text-[#B8AEA3]/60 pointer-events-none'
       : active
