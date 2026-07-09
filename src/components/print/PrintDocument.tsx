@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Logo from '@/components/Logo';
 import { getProject, getAllDocs } from '@/lib/repo/projects';
 import { getPhotoUrl } from '@/lib/photos';
 import { buildLockedSnapshot } from '@/lib/inheritance';
@@ -91,34 +92,35 @@ export function Header({ project, docType, status, locked }: {
   project: Project; docType: DocType; status: string; locked: boolean;
 }) {
   return (
-    <header className="flex justify-between items-end border-b-2 border-[#2B2D2F] pb-3 mb-4">
+    <header className="print-doc-header">
       <div>
-        <div className="font-mono font-bold text-xl tracking-[3px]">
-          COTA<span className="text-[#C38A5A]">·</span>CERO
-        </div>
-        <div className="text-[10px] text-[#B8AEA3] tracking-[1px] mt-0.5">
-          DOCUMENTACIÓN DE OBRA
-        </div>
+        <Logo size="sm" />
+        <span>Superficies y terminaciones</span>
       </div>
-      <div className="text-right">
-        <div className="font-mono font-bold text-[#2B2D2F]">{project.code}</div>
-        <div className="text-sm">
-          <span className="font-mono font-semibold text-[#C38A5A]">{docType}</span> · {DOC_LABELS[docType]}
-        </div>
-        <div className="text-[10px] text-[#B8AEA3] mt-0.5 uppercase tracking-wide">
-          {locked ? `● ${humanize(status)}` : `○ ${humanize(status)} (borrador)`}
-        </div>
+      <div>
+        <span>{project.code}</span>
+        <strong><b>{docType}</b> - {DOC_LABELS[docType]}</strong>
+        <small className={locked ? 'is-locked' : 'is-draft'}>
+          {locked ? humanize(status) : `${humanize(status)} - borrador`}
+        </small>
       </div>
     </header>
   );
 }
 
-export function Footer({ project, doc }: { project: Project; doc: AnyDoc | null }) {
+export function Footer({ project, doc, pageNumber, totalPages }: {
+  project: Project;
+  doc: AnyDoc | null;
+  pageNumber?: number;
+  totalPages?: number;
+}) {
   return (
-    <footer className="mt-5 pt-2 border-t border-[#B8AEA3]/50 flex justify-between text-[9px] text-[#B8AEA3] font-mono">
-      <span>{project.clienteNombre} · {project.code}</span>
+    <footer className="print-doc-footer">
+      <span>{project.clienteNombre} - {project.code}</span>
       <span>
-        {doc?.lockedAt
+        {pageNumber && totalPages
+          ? `Página ${String(pageNumber).padStart(2, '0')}/${String(totalPages).padStart(2, '0')}`
+          : doc?.lockedAt
           ? `Bloqueado: ${fmtDateTime(doc.lockedAt)}`
           : `Generado: ${fmtDateTime(Date.now())}`}
       </span>
@@ -126,14 +128,14 @@ export function Footer({ project, doc }: { project: Project; doc: AnyDoc | null 
   );
 }
 
-export function PrintActions() {
+export function PrintActions({ label = 'Imprimir / Guardar PDF' }: { label?: string }) {
   return (
     <button
       type="button"
       onClick={() => window.print()}
       className="no-print fixed bottom-5 right-5 bg-[#2B2D2F] text-[#F5F2ED] font-semibold rounded-md px-6 py-3 text-sm shadow-lg"
     >
-      Imprimir / Guardar PDF
+      {label}
     </button>
   );
 }
@@ -462,9 +464,9 @@ function Section({ title, children, inherited }: {
   title: string; children: React.ReactNode; inherited?: boolean;
 }) {
   return (
-    <section className={`doc-section mb-3 ${inherited ? 'bg-[#F5F2ED] border border-[#B8AEA3]/40 rounded px-4 py-2.5' : ''}`}>
-      <h2 className="text-[10px] font-bold tracking-[1px] text-[#B8AEA3] uppercase border-b border-[#B8AEA3] pb-1 mb-1.5">
-        {title}{inherited ? ' · heredado' : ''}
+    <section className={`doc-section print-doc-section ${inherited ? 'is-inherited' : ''}`}>
+      <h2 className="print-doc-section-title">
+        {title}{inherited ? ' - heredado' : ''}
       </h2>
       {children}
     </section>
@@ -472,14 +474,14 @@ function Section({ title, children, inherited }: {
 }
 
 function Grid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-3 gap-x-6 gap-y-2">{children}</div>;
+  return <div className="print-field-grid">{children}</div>;
 }
 
 function Field({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div>
-      <div className="text-[10px] text-[#B8AEA3]">{label}</div>
-      <div className={`${strong ? 'font-semibold' : 'font-medium'} capitalize`}>{value || '—'}</div>
+    <div className="print-field">
+      <span>{label}</span>
+      <strong className={strong ? 'is-strong' : ''}>{value || '-'}</strong>
     </div>
   );
 }
@@ -488,19 +490,19 @@ function Paragraph({ label, value }: { label?: string; value: unknown }) {
   const v = str(value);
   if (!v) return null;
   return (
-    <div className="mt-2">
-      {label && <div className="text-[10px] text-[#B8AEA3]">{label}</div>}
-      <p className="whitespace-pre-wrap leading-relaxed">{v}</p>
+    <div className="print-paragraph">
+      {label && <span>{label}</span>}
+      <p>{v}</p>
     </div>
   );
 }
 
 function Chips({ items }: { items: string[] }) {
-  if (items.length === 0) return <p className="text-[#B8AEA3] text-sm">—</p>;
+  if (items.length === 0) return <p className="print-empty">-</p>;
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="print-chip-list">
       {items.map((it) => (
-        <span key={it} className="text-xs border border-[#B8AEA3]/60 rounded px-2 py-0.5 capitalize">
+        <span key={it}>
           {humanize(it)}
         </span>
       ))}
@@ -510,12 +512,12 @@ function Chips({ items }: { items: string[] }) {
 
 function ListBlock({ label, items }: { label: string; items: string[] }) {
   return (
-    <div>
-      <div className="text-[10px] text-[#B8AEA3] mb-1">{label}</div>
+    <div className="print-list-block">
+      <span>{label}</span>
       {items.length === 0 ? (
-        <p className="text-[#B8AEA3] text-sm">—</p>
+        <p className="print-empty">-</p>
       ) : (
-        <ul className="list-disc list-inside space-y-0.5">
+        <ul>
           {items.map((it, i) => <li key={i}>{it}</li>)}
         </ul>
       )}
@@ -526,13 +528,13 @@ function ListBlock({ label, items }: { label: string; items: string[] }) {
 function DataTable({ columns, rows, empty }: {
   columns: string[]; rows: (string | number)[][]; empty: string;
 }) {
-  if (rows.length === 0) return <p className="text-[#B8AEA3] text-sm">{empty}</p>;
+  if (rows.length === 0) return <p className="print-empty">{empty}</p>;
   return (
-    <table className="w-full border-collapse text-sm">
+    <table className="print-data-table">
       <thead>
         <tr>
           {columns.map((c) => (
-            <th key={c} className="text-left text-[10px] text-[#B8AEA3] font-semibold border-b border-[#B8AEA3] py-1 px-2">{c}</th>
+            <th key={c}>{c}</th>
           ))}
         </tr>
       </thead>
@@ -540,7 +542,7 @@ function DataTable({ columns, rows, empty }: {
         {rows.map((r, i) => (
           <tr key={i}>
             {r.map((cell, j) => (
-              <td key={j} className="py-1 px-2 border-b border-[#F5F2ED] align-top">{cell === '' ? '—' : cell}</td>
+              <td key={j}>{cell === '' ? '-' : cell}</td>
             ))}
           </tr>
         ))}
@@ -565,7 +567,7 @@ function ObservacionesBlock({ value }: { value: unknown }) {
   if (!v) return null;
   return (
     <Section title="Observaciones">
-      <p className="whitespace-pre-wrap leading-relaxed">{v}</p>
+      <p className="print-note-text">{v}</p>
     </Section>
   );
 }

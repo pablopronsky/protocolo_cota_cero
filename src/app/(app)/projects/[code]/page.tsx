@@ -58,6 +58,16 @@ const STATUS_CONFIG: Record<DocStatus, {
   },
 };
 
+function isDocLocked(status: DocStatus | undefined): boolean {
+  return status === 'completo' || status === 'firmado';
+}
+
+function isLegajoFinal(docStatus: Partial<Record<DocType, DocStatus>> | undefined): boolean {
+  return DOC_ORDER.every((docType) => isDocLocked(docStatus?.[docType]))
+    && docStatus?.RF === 'firmado'
+    && docStatus?.AC === 'firmado';
+}
+
 export default function ProjectOverviewPage({
   params,
 }: {
@@ -86,6 +96,7 @@ export default function ProjectOverviewPage({
   }
 
   const isArchived = project.status === 'archivado';
+  const legajoFinal = isLegajoFinal(project.docStatus);
 
   async function handleArchive() {
     if (!project) return;
@@ -287,9 +298,13 @@ export default function ProjectOverviewPage({
       <Link
         href={`/print/${project.code}`}
         target="_blank"
-        className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] border border-[rgba(43,45,47,0.15)] rounded-md py-3 text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] transition-colors"
+        className={`block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] border rounded-md py-3 transition-colors ${
+          legajoFinal
+            ? 'border-[#C38A5A]/55 text-[#2B2D2F] hover:border-[#C38A5A] hover:text-[#C38A5A]'
+            : 'border-[#C38A5A]/35 text-[#8F5B33] hover:border-[#C38A5A]/60'
+        }`}
       >
-        Legajo completo · PDF
+        {legajoFinal ? 'Legajo final · PDF' : 'Vista previa legajo · PDF'}
       </Link>
 
       {/* Admin actions */}

@@ -153,12 +153,672 @@ input[type="radio"] {
   print-color-adjust: exact;
 }
 
+.print-page.legajo-page {
+  padding: 0;
+  background: #fffdf9;
+  color: #151515;
+  font-size: 10.4pt;
+  line-height: 1.45;
+}
+
+.legajo-canvas {
+  position: relative;
+  min-height: 297mm;
+  padding: 15mm 16mm;
+  overflow: hidden;
+  background: #fffdf9;
+}
+
+.legajo-canvas::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(195, 138, 90, 0.045) 1px, transparent 1px) 0 0 / 26mm 26mm,
+    linear-gradient(0deg, rgba(43, 45, 47, 0.032) 1px, transparent 1px) 0 0 / 26mm 26mm;
+}
+
+.legajo-canvas > * {
+  position: relative;
+  z-index: 1;
+}
+
+.legajo-doc-canvas {
+  overflow: visible;
+}
+
+.legajo-loading {
+  color: #8c8277;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.legajo-cover {
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  padding: 16mm 16mm 12mm;
+  color: #f5f2ed;
+  background:
+    linear-gradient(135deg, rgba(31, 31, 31, 0.98), rgba(43, 45, 47, 0.98)),
+    radial-gradient(circle at 80% 20%, rgba(195, 138, 90, 0.18), transparent 38%);
+}
+
+.legajo-cover::before {
+  background:
+    linear-gradient(90deg, rgba(245, 242, 237, 0.06) 1px, transparent 1px) 0 0 / 21mm 21mm,
+    linear-gradient(0deg, rgba(245, 242, 237, 0.045) 1px, transparent 1px) 0 0 / 21mm 21mm;
+}
+
+.legajo-cover::after {
+  content: "";
+  position: absolute;
+  right: 18mm;
+  top: 30mm;
+  width: 28mm;
+  height: 164mm;
+  border-left: 1px solid rgba(195, 138, 90, 0.58);
+  border-right: 1px solid rgba(245, 242, 237, 0.18);
+  opacity: 0.8;
+}
+
+.legajo-cover-top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18mm;
+}
+
+.legajo-cover-logo {
+  display: grid;
+  gap: 3mm;
+}
+
+.legajo-cover-logo > span:last-child {
+  color: rgba(245, 242, 237, 0.72);
+  font-size: 7pt;
+  font-weight: 700;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+}
+
+.legajo-status-stamp {
+  min-width: 38mm;
+  padding: 4.5mm 5mm;
+  border: 1px solid rgba(195, 138, 90, 0.62);
+  color: #f5f2ed;
+  text-align: right;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 7.2pt;
+}
+
+.legajo-status-stamp strong {
+  display: block;
+  margin-top: 1.8mm;
+  color: #c38a5a;
+  font-size: 12.5pt;
+  letter-spacing: 0.1em;
+}
+
+.legajo-status-stamp.is-final strong {
+  color: #f5f2ed;
+}
+
+.legajo-cover-main {
+  align-self: end;
+  max-width: 145mm;
+  padding-bottom: 14mm;
+}
+
+.legajo-kicker {
+  margin: 0 0 6mm;
+  color: #8f5b33;
+  font-size: 7.5pt;
+  font-weight: 900;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.legajo-cover .legajo-kicker {
+  color: #c38a5a;
+  font-size: 8pt;
+  letter-spacing: 0.33em;
+}
+
+.legajo-cover-main h1 {
+  margin: 0;
+  color: #f5f2ed;
+  font-size: 43pt;
+  line-height: 0.95;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.legajo-cover-main h1 span {
+  display: block;
+  color: #c38a5a;
+}
+
+.legajo-cover-main p {
+  max-width: 105mm;
+  margin: 8mm 0 0;
+  color: rgba(245, 242, 237, 0.82);
+  font-size: 11pt;
+}
+
+.legajo-cover-meta {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr 0.9fr;
+  gap: 4mm;
+  border-top: 1px solid rgba(245, 242, 237, 0.24);
+  padding-top: 6mm;
+}
+
+.legajo-meta-block {
+  min-height: 28mm;
+  padding: 4mm 4mm 3mm;
+  border-left: 2px solid #c38a5a;
+  background: rgba(245, 242, 237, 0.065);
+}
+
+.legajo-meta-block span,
+.legajo-fact span,
+.print-field span,
+.print-paragraph span,
+.print-list-block > span {
+  display: block;
+  margin-bottom: 1mm;
+  color: #8b8177;
+  font-size: 6.8pt;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.legajo-meta-block span {
+  color: rgba(245, 242, 237, 0.55);
+  letter-spacing: 0.23em;
+}
+
+.legajo-meta-block strong {
+  display: block;
+  color: #f5f2ed;
+  font-size: 12.5pt;
+  line-height: 1.2;
+}
+
+.legajo-meta-block small {
+  display: block;
+  margin-top: 1mm;
+  color: rgba(245, 242, 237, 0.65);
+  font-size: 8.4pt;
+}
+
+.legajo-cover-caption {
+  margin-top: 5mm;
+  color: rgba(245, 242, 237, 0.48);
+  font-size: 7pt;
+  font-weight: 800;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+}
+
+.legajo-running-header,
+.print-doc-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12mm;
+  margin-bottom: 9mm;
+  padding-bottom: 4mm;
+  border-bottom: 1px solid #ded7cd;
+}
+
+.legajo-running-header > div:last-child,
+.print-doc-header > div:last-child {
+  text-align: right;
+}
+
+.legajo-running-header span,
+.print-doc-header > div:last-child > span {
+  display: block;
+  color: #56514d;
+  font-size: 7.2pt;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.legajo-running-header strong,
+.print-doc-header strong {
+  display: block;
+  margin-top: 1mm;
+  color: #151515;
+  font-size: 10pt;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.print-doc-header > div:first-child {
+  display: grid;
+  gap: 1.5mm;
+}
+
+.print-doc-header > div:first-child > span:last-child {
+  color: #8c8277;
+  font-size: 6.8pt;
+  font-weight: 800;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+}
+
+.print-doc-header small {
+  display: block;
+  margin-top: 1mm;
+  color: #8c8277;
+  font-size: 7pt;
+  font-weight: 900;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.print-doc-header small.is-locked {
+  color: #315e50;
+}
+
+.print-doc-header small.is-draft {
+  color: #8f5b33;
+}
+
+.legajo-content {
+  position: relative;
+}
+
+.legajo-page-title {
+  margin: 0 0 6mm;
+  color: #151515;
+  font-size: 24pt;
+  line-height: 1.02;
+  letter-spacing: 0;
+}
+
+.legajo-lead {
+  max-width: 142mm;
+  margin: -3mm 0 7mm;
+  color: #56514d;
+  font-size: 9.5pt;
+}
+
+.legajo-summary-grid {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 4mm;
+  margin-bottom: 5mm;
+}
+
+.legajo-panel {
+  border: 1px solid #ded7cd;
+  background: rgba(245, 242, 237, 0.58);
+}
+
+.legajo-panel.is-dark {
+  color: #f5f2ed;
+  border-color: #2b2d2f;
+  background: #2b2d2f;
+}
+
+.legajo-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4mm;
+  padding: 3.2mm 4mm 2.8mm;
+  border-bottom: 1px solid #ded7cd;
+}
+
+.legajo-panel.is-dark .legajo-panel-head {
+  border-bottom-color: rgba(245, 242, 237, 0.16);
+}
+
+.legajo-panel-head h3 {
+  margin: 0;
+  font-size: 9pt;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.legajo-panel-body {
+  padding: 3.6mm 4mm 4mm;
+}
+
+.legajo-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 3.2mm 5mm;
+}
+
+.legajo-fact strong {
+  display: block;
+  color: #151515;
+  font-size: 10.1pt;
+  line-height: 1.25;
+}
+
+.legajo-fact.is-dark span {
+  color: rgba(245, 242, 237, 0.55);
+}
+
+.legajo-fact.is-dark strong {
+  color: #f5f2ed;
+}
+
+.legajo-big-number {
+  margin: 0 0 4mm;
+  color: #f5f2ed;
+  font-size: 31pt;
+  font-weight: 900;
+  line-height: 0.95;
+}
+
+.legajo-big-number small {
+  color: rgba(245, 242, 237, 0.62);
+  font-size: 11pt;
+  font-weight: 700;
+}
+
+.legajo-badge,
+.legajo-step-status {
+  display: inline-block;
+  padding: 1.2mm 2mm;
+  border: 1px solid;
+  font-size: 6.7pt;
+  font-weight: 900;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.legajo-badge.is-ok,
+.legajo-step-status.is-ok {
+  color: #315e50;
+  border-color: rgba(49, 94, 80, 0.35);
+  background: rgba(49, 94, 80, 0.08);
+}
+
+.legajo-panel.is-dark .legajo-badge.is-ok {
+  color: #f5f2ed;
+  border-color: rgba(245, 242, 237, 0.36);
+}
+
+.legajo-badge.is-progress,
+.legajo-step-status.is-progress {
+  color: #8f5b33;
+  border-color: rgba(165, 107, 54, 0.38);
+  background: rgba(195, 138, 90, 0.11);
+}
+
+.legajo-step-status.is-pending {
+  color: #8c3e34;
+  border-color: rgba(140, 62, 52, 0.35);
+  background: rgba(140, 62, 52, 0.07);
+}
+
+.legajo-status-line {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 1.8mm;
+  margin: 3.5mm 0 5mm;
+}
+
+.legajo-step {
+  min-height: 21mm;
+  padding: 2.6mm 2.4mm;
+  border: 1px solid #ded7cd;
+  background: #fffdf9;
+}
+
+.legajo-step-num {
+  color: #b8aea3;
+  font-family: var(--font-mono);
+  font-size: 8pt;
+  font-weight: 800;
+}
+
+.legajo-step-code {
+  display: block;
+  margin-top: 1.2mm;
+  color: #151515;
+  font-size: 10pt;
+  font-weight: 900;
+}
+
+.legajo-alert {
+  display: grid;
+  grid-template-columns: 31mm 1fr;
+  gap: 5mm;
+  align-items: center;
+  margin: 4mm 0 5mm;
+  padding: 3.4mm 4mm;
+  border: 1px solid rgba(195, 138, 90, 0.45);
+  background: linear-gradient(90deg, rgba(195, 138, 90, 0.16), rgba(245, 242, 237, 0.78));
+}
+
+.legajo-alert.is-ok {
+  border-color: rgba(49, 94, 80, 0.28);
+  background: linear-gradient(90deg, rgba(49, 94, 80, 0.14), rgba(245, 242, 237, 0.78));
+}
+
+.legajo-alert div {
+  color: #8f5b33;
+  font-size: 17pt;
+  font-weight: 900;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.legajo-alert.is-ok div {
+  color: #315e50;
+}
+
+.legajo-alert p {
+  margin: 0;
+  color: #56514d;
+}
+
+.legajo-exit-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 3mm;
+}
+
+.legajo-exit-item {
+  min-height: 22mm;
+  padding: 2.8mm;
+  border: 1px solid #ded7cd;
+  background: #fffdf9;
+}
+
+.legajo-exit-item strong {
+  display: block;
+  margin-bottom: 1.2mm;
+  color: #151515;
+  font-size: 9.1pt;
+}
+
+.legajo-exit-item span {
+  display: block;
+  color: #56514d;
+  font-size: 8.1pt;
+}
+
+.legajo-preview-note {
+  margin: -4mm 0 5mm;
+  padding: 3mm 3.6mm;
+  border-left: 2px solid #c38a5a;
+  background: rgba(195, 138, 90, 0.1);
+  color: #56514d;
+  font-size: 8.8pt;
+}
+
+.legajo-preview-note strong {
+  color: #151515;
+}
+
+.legajo-running-footer,
+.print-doc-footer {
+  position: absolute;
+  left: 16mm;
+  right: 16mm;
+  bottom: 8mm;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #8c8277;
+  font-size: 7.5pt;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+}
+
+.print-doc-footer {
+  position: static;
+  margin-top: 6mm;
+  padding-top: 2mm;
+  border-top: 1px solid rgba(184, 174, 163, 0.5);
+}
+
+.print-doc-section {
+  margin-bottom: 4mm;
+}
+
+.print-doc-section.is-inherited {
+  padding: 3mm;
+  border: 1px solid rgba(184, 174, 163, 0.38);
+  background: rgba(245, 242, 237, 0.58);
+}
+
+.print-doc-section-title {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4mm;
+  margin: 0 0 2mm;
+  padding-bottom: 1.8mm;
+  border-bottom: 1px solid #ded7cd;
+  color: #8f5b33;
+  font-size: 7pt;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.print-field-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 2.6mm;
+}
+
+.print-field {
+  min-height: 17mm;
+  padding: 2.4mm;
+  border: 1px solid #ded7cd;
+  background: rgba(245, 242, 237, 0.36);
+}
+
+.print-field strong {
+  display: block;
+  color: #151515;
+  font-size: 9.5pt;
+  line-height: 1.25;
+}
+
+.print-field strong.is-strong {
+  font-size: 10.2pt;
+}
+
+.print-paragraph {
+  margin-top: 2mm;
+}
+
+.print-paragraph p,
+.print-note-text {
+  margin: 0;
+  color: #56514d;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.print-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.5mm;
+}
+
+.print-chip-list span {
+  padding: 1mm 2mm;
+  border: 1px solid rgba(184, 174, 163, 0.6);
+  color: #56514d;
+  font-size: 8pt;
+  text-transform: capitalize;
+}
+
+.print-list-block ul {
+  margin: 0;
+  padding-left: 4mm;
+}
+
+.print-list-block li {
+  margin-bottom: 1mm;
+  color: #56514d;
+}
+
+.print-empty {
+  margin: 0;
+  color: #8c8277;
+  font-size: 8.5pt;
+}
+
+.print-data-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #ded7cd;
+  background: #fffdf9;
+  font-size: 8.8pt;
+}
+
+.print-data-table th,
+.print-data-table td {
+  padding: 2.2mm 2.4mm;
+  border-bottom: 1px solid #ded7cd;
+  text-align: left;
+  vertical-align: top;
+}
+
+.print-data-table th {
+  color: #8f5b33;
+  background: #f5f2ed;
+  font-size: 6.7pt;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.print-data-table tr:last-child td {
+  border-bottom: 0;
+}
+
 @media print {
   @page { size: A4; margin: 16mm; }
+  @page legajo { size: A4; margin: 0; }
   .no-print { display: none !important; }
   body { background: white; color: black; font-size: 10pt; }
   .print-shell { background: white; padding: 0; }
   .print-page { width: auto; max-width: none; margin: 0; padding: 0; box-shadow: none; }
+  .print-page.legajo-page { width: auto; max-width: none; page: legajo; }
+  .legajo-canvas { min-height: 297mm; }
   /* La portada conserva su lienzo grafito a sangre completa. */
   .print-cover { padding: 22mm 18mm !important; min-height: calc(297mm - 32mm); }
   table, tr, .doc-section { break-inside: avoid; }
