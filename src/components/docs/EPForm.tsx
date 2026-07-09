@@ -2,15 +2,19 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import SaveIndicator from '@/components/SaveIndicator';
 import InheritedBanner from '@/components/InheritedBanner';
-import { useDoc } from '@/hooks/useDoc';
-import { setDocStatus, writeRevision } from '@/lib/repo/projects';
+import { useDoc, offlineLockError } from '@/hooks/useDoc';
+import { setDocStatus, writeRevision, reopenDoc } from '@/lib/repo/projects';
 import { sequencingError } from '@/lib/sequencing';
 import { buildLockedSnapshot, detectDrift, deriveInherited } from '@/lib/inheritance';
+import { Section } from '@/components/docs/Section';
+import { SectionNav } from '@/components/docs/SectionNav';
+import { DocActionBar } from '@/components/docs/DocActionBar';
+import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
 import { useConfirm } from '@/hooks/useConfirm';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/contexts/ToastContext';
 import type { Project, DocEP, AnyDoc, DocType } from '@/schemas';
 import { LIMPIEZA_SOPORTE, CONDICIONES_INICIAR } from '@/schemas';
 import { useProtocolTemplate } from '@/hooks/useProtocolTemplate';
@@ -24,12 +28,15 @@ interface Props {
 }
 
 export default function EPForm({ projectCode, project, upstream, docData }: Props) {
-  const { user } = useAuth();
-  const { docData: liveDoc, saveState, autosave, cancelAutosave } = useDoc(projectCode, 'EP');
+  const { user, role } = useAuth();
+  const { showToast } = useToast();
+  const { docData: liveDoc, autosave, cancelAutosave } = useDoc(projectCode, 'EP');
   const seedDoc = docData as DocEP | null;
   const ep = (liveDoc as DocEP | null) ?? seedDoc;
-  const isLocked = ep?.status === 'completo' || ep?.status === 'firmado';
+  const isArchived = project.status === 'archivado';
+  const isLocked = ep?.status === 'completo' || ep?.status === 'firmado' || isArchived;
   const [locking, setLocking] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [lockErrors, setLockErrors] = useState<string[]>([]);
   const { confirmOpen, confirmMessage, openConfirm, onConfirm, onCancel } = useConfirm();
   const { template, loading: tplLoading } = useProtocolTemplate();
@@ -72,10 +79,12 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
     seededRef.current = true;
   }, [seedDoc?.updatedAt, template, tplLoading]); // eslint-disable-line
 
-  // Autosave: gatear en type==='change' para evitar autosave fantasma al hacer reset() (#6).
+  // Autosave: gatear en `name` — reset() (seed, #6) emite sin name; las ediciones
+  // del usuario (inputs nativos, setValue —mediciones heredadas— y field arrays)
+  // siempre lo traen. Gatear en type==='change' perdía removes y setValue.
   useEffect(() => {
-    const sub = watch((values, { type }) => {
-      if (type !== 'change') return;
+    const sub = watch((values, { name }) => {
+      if (!name) return;
       if (isLocked) return;
       autosave(values as Partial<DocEP>, project.status);
     });
@@ -89,6 +98,8 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
   }
 
   async function handleLock() {
+    const offline = offlineLockError();
+    if (offline) { setLockErrors([offline]); return; }
     const values = getValues();
     const errs: string[] = [];
     if (!values.condicionesParaIniciar?.length) errs.push('Seleccionar al menos una condición para iniciar');
@@ -120,26 +131,55 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
   // Campos heredados readonly desde VT
   const roFields = seed.readonly;
 
+  async function handleReopen() {
+    if (!await openConfirm('¿Reabrir este documento? Volverá a "en progreso" y quedará editable.', { danger: true })) return;
+    setReopening(true);
+    try {
+      await reopenDoc(projectCode, 'EP', user?.uid ?? '');
+      await writeRevision(projectCode, 'EP', 'en_progreso', (ep ?? {}) as Record<string, unknown>, (ep?.version ?? 0) + 1, user?.uid ?? '');
+      showToast('Documento reabierto', 'success');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'No se pudo reabrir el documento.', 'error');
+    } finally {
+      setReopening(false);
+    }
+  }
+
   return (
     <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-[#6B6155] capitalize">{ep?.status ?? 'vacio'}</span>
-        <SaveIndicator state={saveState} />
-      </div>
-
-      {isLocked && (
-        <div className="bg-[#2B2D2F] text-[#F5F2ED] rounded-lg px-4 py-3 text-sm">
-          Documento bloqueado · Solo lectura
+      {roFields.dictamen === 'no_apto' && (
+        <div className="bg-red-50 border border-red-300/50 rounded-lg px-4 py-3 text-[13px] text-red-600">
+          ⚠ La visita técnica dictaminó el soporte como <strong>NO APTO</strong>. La preparación debe resolver los problemas detectados antes de instalar.
         </div>
       )}
+
+      {!isArchived && isLocked && (
+        <div className="bg-[#2B2D2F] text-[#F5F2ED] rounded-lg px-4 py-3 text-sm flex items-center justify-between gap-3 flex-wrap">
+          <span>Documento bloqueado · Solo lectura</span>
+          {role === 'admin' && (
+            <Button variant="danger" size="sm" onClick={handleReopen} disabled={reopening}>
+              {reopening ? 'Reabriendo…' : 'Reabrir'}
+            </Button>
+          )}
+        </div>
+      )}
+
+      <SectionNav sections={[
+        { id: 'ep-mediciones', label: 'Mediciones', done: true },
+        { id: 'ep-nivelacion', label: 'Nivelación', done: !ep?.requiereNivelacion || !!ep?.metodoNivelacion },
+        { id: 'ep-humedad', label: 'Humedad', done: !ep?.tratamientoHumedad || !!ep?.barreraVapor },
+        { id: 'ep-imprimacion', label: 'Imprimación', done: !ep?.requiereImprimacion || !!ep?.productoImprimacion },
+        { id: 'ep-limpieza', label: 'Limpieza', done: (ep?.limpiezaSoporte?.length ?? 0) > 0 },
+        { id: 'ep-condiciones', label: 'Condiciones', done: (ep?.condicionesParaIniciar?.length ?? 0) > 0 },
+      ]} />
 
       <InheritedBanner drifts={drifts} onReimport={reimport} />
 
       {/* Heredados readonly */}
       <div className="bg-[#F5F2ED] border border-[rgba(43,45,47,0.08)] rounded-lg px-4 py-3 space-y-2">
         <p className="eyebrow">Datos de VT · Solo lectura</p>
-        <div className="grid grid-cols-3 gap-3 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
           <div><p className="text-xs text-[#6B6155]">Estado soporte</p><p className="font-medium capitalize">{String(roFields.estadoSoporte || '—')}</p></div>
           <div><p className="text-xs text-[#6B6155]">Material soporte</p><p className="font-medium capitalize">{String(roFields.materialSoporte || '—')}</p></div>
           <div><p className="text-xs text-[#6B6155]">Dictamen VT</p><p className="font-medium capitalize">{String(roFields.dictamen || '—').replace('_', ' ')}</p></div>
@@ -147,9 +187,8 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
       </div>
 
       {/* Editables heredados */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Mediciones</p>
-        <div className="grid grid-cols-2 gap-3">
+      <Section id="ep-mediciones" title="Mediciones">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="desnivelMm" className={labelCls}>Desnivel (mm)</label>
             <input id="desnivelMm" type="number" inputMode="decimal"
@@ -165,17 +204,16 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
               className={inputCls} disabled={isLocked} />
           </div>
         </div>
-      </div>
+      </Section>
 
       {/* Nivelación */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Nivelación</p>
+      <Section id="ep-nivelacion" title="Nivelación">
         <label className="flex items-center gap-3 text-sm">
           <input type="checkbox" {...register('requiereNivelacion')} disabled={isLocked} />
           Requiere nivelación
         </label>
         {watch('requiereNivelacion') && (
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="metodoNivelacion" className={labelCls}>Método</label>
               <select id="metodoNivelacion" {...register('metodoNivelacion')} className={inputCls} disabled={isLocked}>
@@ -191,11 +229,10 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
             </div>
           </div>
         )}
-      </div>
+      </Section>
 
       {/* Humedad */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Tratamiento de humedad</p>
+      <Section id="ep-humedad" title="Tratamiento de humedad">
         <label className="flex items-center gap-3 text-sm">
           <input type="checkbox" {...register('tratamientoHumedad')} disabled={isLocked} />
           Requiere tratamiento
@@ -211,11 +248,10 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
             </select>
           </div>
         )}
-      </div>
+      </Section>
 
       {/* Imprimación */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Imprimación</p>
+      <Section id="ep-imprimacion" title="Imprimación">
         <label className="flex items-center gap-3 text-sm">
           <input type="checkbox" {...register('requiereImprimacion')} disabled={isLocked} />
           Requiere imprimación
@@ -226,12 +262,11 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
             <input id="productoImprimacion" {...register('productoImprimacion')} className={inputCls} disabled={isLocked} />
           </div>
         )}
-      </div>
+      </Section>
 
       {/* Limpieza */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Limpieza del soporte</p>
-        <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+      <Section id="ep-limpieza" title="Limpieza del soporte">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4">
           {LIMPIEZA_SOPORTE.map((l) => (
             <label key={l} className="flex items-center gap-3 text-sm capitalize">
               <input type="checkbox" value={l} {...register('limpiezaSoporte')} disabled={isLocked} />
@@ -239,18 +274,17 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
             </label>
           ))}
         </div>
-      </div>
+      </Section>
 
       {/* Reparaciones previas */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Reparaciones previas</p>
+      <Section id="ep-reparaciones" title="Reparaciones previas">
         {reparaciones.map((field, i) => (
-          <div key={field.id} className="flex gap-2 items-end">
-            <div className="flex-1">
+          <div key={field.id} className="flex flex-wrap gap-2 items-end">
+            <div className="flex-1 min-w-[8rem]">
               <label htmlFor={`reparacion-${i}-zona`} className="text-xs text-[#6B6155] block mb-0.5">Zona</label>
               <input id={`reparacion-${i}-zona`} {...register(`reparacionesPrevias.${i}.zona`)} className={inputCls} disabled={isLocked} />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-[8rem]">
               <label htmlFor={`reparacion-${i}-accion`} className="text-xs text-[#6B6155] block mb-0.5">Acción</label>
               <input id={`reparacion-${i}-accion`} {...register(`reparacionesPrevias.${i}.accion`)} className={inputCls} disabled={isLocked} />
             </div>
@@ -264,12 +298,11 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
             + Agregar reparación
           </button>
         )}
-      </div>
+      </Section>
 
       {/* Condiciones para iniciar */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Condiciones para iniciar</p>
-        <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+      <Section id="ep-condiciones" title="Condiciones para iniciar">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4">
           {CONDICIONES_INICIAR.map((c) => (
             <label key={c} className="flex items-center gap-3 text-sm capitalize">
               <input type="checkbox" value={c} {...register('condicionesParaIniciar')} disabled={isLocked} />
@@ -277,7 +310,7 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
             </label>
           ))}
         </div>
-      </div>
+      </Section>
 
       <div>
         <label htmlFor="tiemposSecadoEstimados" className={labelCls}>Tiempos de secado estimados</label>
@@ -289,18 +322,19 @@ export default function EPForm({ projectCode, project, upstream, docData }: Prop
         <textarea id="epObservaciones" rows={3} {...register('observaciones')} className={inputCls} disabled={isLocked} />
       </div>
 
-      {lockErrors.length > 0 && (
-        <div className="border border-red-300/50 bg-red-50 rounded-lg px-4 py-3 space-y-1">
-          <p className="text-[13px] font-bold uppercase tracking-[0.14em] text-red-500">Completar antes de bloquear</p>
-          {lockErrors.map((e, i) => <p key={i} className="text-[13px] text-red-500">· {e}</p>)}
-        </div>
-      )}
-
       {!isLocked && (
-        <button type="button" onClick={handleLock} disabled={locking}
-          className="w-full text-white font-bold text-[11px] uppercase tracking-[0.24em] rounded-md py-3.5 disabled:opacity-50 no-print transition-colors" style={{ background: '#C38A5A' }}>
-          {locking ? 'Bloqueando…' : 'Marcar como completo'}
-        </button>
+        <DocActionBar>
+          {lockErrors.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-red-500">Completar antes de bloquear</p>
+              {lockErrors.map((e, i) => <p key={i} className="text-[12px] text-red-500">· {e}</p>)}
+            </div>
+          )}
+          <button type="button" onClick={handleLock} disabled={locking}
+            className="w-full text-white font-bold text-[11px] uppercase tracking-[0.24em] rounded-md py-3.5 disabled:opacity-50 transition-colors" style={{ background: '#C38A5A' }}>
+            {locking ? 'Bloqueando…' : 'Marcar como completo'}
+          </button>
+        </DocActionBar>
       )}
     </form>
       <ConfirmDialog open={confirmOpen} message={confirmMessage} onConfirm={onConfirm} onCancel={onCancel} />

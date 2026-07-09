@@ -4,6 +4,7 @@ import { use } from 'react';
 import Link from 'next/link';
 import { useProject } from '@/hooks/useProject';
 import type { DocType } from '@/schemas';
+import { Skeleton } from '@/components/ui/Skeleton';
 import VTForm from '@/components/docs/VTForm';
 import EPForm from '@/components/docs/EPForm';
 import OTForm from '@/components/docs/OTForm';
@@ -35,10 +36,14 @@ export default function DocEditorPage({
 
   if (loading) {
     return (
-      <div className="py-16 text-center">
-        <span className="text-[13px] font-mono uppercase tracking-[0.2em] text-[#6B6155]">
-          Cargando…
-        </span>
+      <div className="pb-20 max-w-2xl space-y-4">
+        <Skeleton className="h-4 w-24" />
+        <Skeleton className="h-10 w-3/4" />
+        <div className="space-y-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <Skeleton key={i} className="h-32 rounded-lg" />
+          ))}
+        </div>
       </div>
     );
   }
@@ -46,18 +51,21 @@ export default function DocEditorPage({
   if (!VALID_DOC_TYPES.includes(docType)) return <p className="text-sm text-red-500">Tipo de documento inválido.</p>;
 
   const docData = docs[docType] ?? null;
-  const currentStatus = (docData as { status?: DocStatus } | null)?.status ?? 'vacio';
+  // project.docStatus es el mirror en vivo (subscribeProject): refleja el cierre
+  // del doc sin recargar, a diferencia de docs[docType] que es un snapshot.
+  const currentStatus: DocStatus = project.docStatus?.[docType] ?? 'vacio';
+  const isArchived = project.status === 'archivado';
   const commonProps = { projectCode: code, project, upstream: docs, docData };
 
   return (
     <div className="pb-20 max-w-2xl">
       {/* ── Breadcrumb ─────────────────────────────────── */}
       <Link
-        href="/projects"
+        href={`/projects/${code}`}
         className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.24em] text-[#6B6155] hover:text-[#C38A5A] transition-colors mb-5 no-print"
       >
         <span className="text-base leading-none">←</span>
-        Proyectos
+        Proyecto
       </Link>
 
       {/* Project code */}
@@ -66,7 +74,7 @@ export default function DocEditorPage({
       </p>
 
       {/* Step + title */}
-      <div className="flex items-center gap-4 mb-1.5">
+      <div className="flex items-center gap-4 mb-1.5 flex-wrap">
         <span
           className="inline-flex items-center justify-center font-mono font-bold text-[#F5F2ED] rounded"
           style={{
@@ -80,8 +88,7 @@ export default function DocEditorPage({
           {String(stepNum).padStart(2, '0')}
         </span>
         <h1
-          className="font-bold text-[#2B2D2F] leading-tight"
-          style={{ fontSize: 28 }}
+          className="font-bold text-[#2B2D2F] leading-tight text-[22px] sm:text-[28px]"
         >
           {DOC_LABELS[docType]}
         </h1>
@@ -96,9 +103,16 @@ export default function DocEditorPage({
       </div>
 
       {/* Status badge */}
-      <span className="inline-block text-[10px] font-bold uppercase tracking-[0.2em] text-[#6B6155] mb-6">
-        {STATUS_LABEL[currentStatus]}
-      </span>
+      <div className="flex items-center gap-2.5 mb-6">
+        <span className="inline-block text-[10px] font-bold uppercase tracking-[0.2em] text-[#6B6155]">
+          {STATUS_LABEL[currentStatus]}
+        </span>
+        {isArchived && (
+          <span className="text-[10px] font-bold uppercase tracking-[0.16em] border border-[#B8AEA3]/25 text-[#6B6155] rounded px-1.5 py-px">
+            Archivado · Solo lectura
+          </span>
+        )}
+      </div>
 
       {docType === 'VT' && <VTForm {...commonProps} />}
       {docType === 'EP' && <EPForm {...commonProps} />}

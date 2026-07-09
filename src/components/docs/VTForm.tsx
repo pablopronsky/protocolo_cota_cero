@@ -2,13 +2,17 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray, type Control, type UseFormRegister } from 'react-hook-form';
-import SaveIndicator from '@/components/SaveIndicator';
-import { useDoc } from '@/hooks/useDoc';
-import { setDocStatus, writeRevision } from '@/lib/repo/projects';
+import { useDoc, offlineLockError } from '@/hooks/useDoc';
+import { setDocStatus, writeRevision, reopenDoc } from '@/lib/repo/projects';
 import { buildLockedSnapshot } from '@/lib/inheritance';
 import { enqueuePhoto, removePhotoFromDoc } from '@/lib/photos';
 import PhotoThumb from '@/components/docs/PhotoThumb';
+import { Section } from '@/components/docs/Section';
+import { SectionNav } from '@/components/docs/SectionNav';
+import { DocActionBar } from '@/components/docs/DocActionBar';
+import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
+import { useToast } from '@/contexts/ToastContext';
 import type { Project, DocVT, AnyDoc, DocType } from '@/schemas';
 import {
   ENCUENTROS_CRITICOS, CONDICIONES_ESPACIO,
@@ -91,31 +95,17 @@ function AmbienteVarillas({ control, register, nestIndex, isLocked, inputCls }: 
   );
 }
 
-function Section({ title, children }: {
-  title: string; children: React.ReactNode;
-}) {
-  return (
-    <div className="doc-section rounded-lg overflow-hidden border border-[rgba(43,45,47,0.10)]">
-      <div className="px-4 py-2.5" style={{ background: '#7B4A28' }}>
-        <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-white/90">
-          | {title}
-        </span>
-      </div>
-      <div className="px-4 pb-4 pt-3 space-y-3 bg-white border-t border-[rgba(43,45,47,0.06)]">
-        {children}
-      </div>
-    </div>
-  );
-}
-
 export default function VTForm({ projectCode, project, upstream, docData }: Props) {
-  const { user } = useAuth();
+  const { user, role } = useAuth();
+  const { showToast } = useToast();
   const users = useUsers();
-  const { docData: liveDoc, saveState, autosave, cancelAutosave } = useDoc(projectCode, 'VT');
+  const { docData: liveDoc, autosave, cancelAutosave } = useDoc(projectCode, 'VT');
   const seedDoc = docData as DocVT | null;
   const vt = (liveDoc as DocVT | null) ?? seedDoc;
-  const isLocked = vt?.status === 'completo' || vt?.status === 'firmado';
+  const isArchived = project.status === 'archivado';
+  const isLocked = vt?.status === 'completo' || vt?.status === 'firmado' || isArchived;
   const [locking, setLocking] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [lockErrors, setLockErrors] = useState<string[]>([]);
   const { confirmOpen, confirmMessage, confirmDanger, openConfirm, onConfirm, onCancel } = useConfirm();
   const { template, loading: tplLoading } = useProtocolTemplate();
@@ -161,10 +151,12 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
   }, [liveDoc]);
 
   // Autosave: excluir registroFotografico — lib/photos.ts es el único escritor.
-  // Gatear en type==='change' para evitar autosave fantasma al hacer reset() (#6).
+  // Gatear en `name` — reset() (seed, #6) emite sin name; las ediciones del
+  // usuario (inputs nativos, setValue y field arrays) siempre lo traen. Gatear
+  // en type==='change' perdía los removes de filas y los setValue.
   useEffect(() => {
-    const sub = watch((values, { type }) => {
-      if (type !== 'change') return;
+    const sub = watch((values, { name }) => {
+      if (!name) return;
       if (isLocked) return;
       const { registroFotografico: _, ...rest } = values;
       autosave(rest as Partial<DocVT>, project.status);
@@ -172,19 +164,20 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
     return () => sub.unsubscribe();
   }, [watch, isLocked, autosave, project.status]);
 
-  // Recalcular m2Total al cambiar ambientes.
+  // Recalcular m2Total al cambiar ambientes (incluye eliminar una fila, que
+  // emite con name='ambientes' y sin type).
   useEffect(() => {
-    const sub = watch((values, { name, type }) => {
-      if (type !== 'change') return;
-      if (name?.startsWith('ambientes')) {
-        const total = (values.ambientes ?? []).reduce((s, a) => s + (Number(a?.m2) || 0), 0);
-        setValue('m2Total', total);
-      }
+    const sub = watch((values, { name }) => {
+      if (!name?.startsWith('ambientes')) return;
+      const total = (values.ambientes ?? []).reduce((s, a) => s + (Number(a?.m2) || 0), 0);
+      setValue('m2Total', total);
     });
     return () => sub.unsubscribe();
   }, [watch, setValue]);
 
   async function handleLock() {
+    const offline = offlineLockError();
+    if (offline) { setLockErrors([offline]); return; }
     const values = getValues();
     const errs: string[] = [];
     if (!values.fechaVisita) errs.push('Fecha de visita requerida');
@@ -214,6 +207,21 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
       setLockErrors([e instanceof Error ? e.message : 'No se pudo bloquear el documento.']);
     } finally {
       setLocking(false);
+    }
+  }
+
+  // #19 — Admin puede reabrir un doc bloqueado (deja auditoría en revisions).
+  async function handleReopen() {
+    if (!await openConfirm('¿Reabrir este documento? Volverá a "en progreso" y quedará editable.', { danger: true })) return;
+    setReopening(true);
+    try {
+      await reopenDoc(projectCode, 'VT', user?.uid ?? '');
+      await writeRevision(projectCode, 'VT', 'en_progreso', (vt ?? {}) as Record<string, unknown>, (vt?.version ?? 0) + 1, user?.uid ?? '');
+      showToast('Documento reabierto', 'success');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'No se pudo reabrir el documento.', 'error');
+    } finally {
+      setReopening(false);
     }
   }
 
@@ -251,23 +259,31 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
   return (
     <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-      {/* Status bar */}
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-[#6B6155] capitalize">
-          {vt?.status ?? 'vacio'}
-        </span>
-        <SaveIndicator state={saveState} />
-      </div>
-
-      {isLocked && (
-        <div className="bg-[#2B2D2F] text-[#F5F2ED] rounded-lg px-4 py-3 text-sm">
-          Documento bloqueado · Solo lectura
+      {!isArchived && isLocked && (
+        <div className="bg-[#2B2D2F] text-[#F5F2ED] rounded-lg px-4 py-3 text-sm flex items-center justify-between gap-3 flex-wrap">
+          <span>Documento bloqueado · Solo lectura</span>
+          {role === 'admin' && (
+            <Button variant="danger" size="sm" onClick={handleReopen} disabled={reopening}>
+              {reopening ? 'Reabriendo…' : 'Reabrir'}
+            </Button>
+          )}
         </div>
       )}
 
+      <SectionNav sections={[
+        { id: 'vt-datos', label: 'Datos', done: !!vt?.fechaVisita && !!vt?.tecnico && !!vt?.estadoSoporte && !!vt?.materialSoporte },
+        { id: 'vt-ambientes', label: 'Ambientes', done: (vt?.ambientes?.length ?? 0) > 0 },
+        { id: 'vt-humedad', label: 'Humedad', done: !!vt?.humedad?.metodo },
+        { id: 'vt-nivelacion', label: 'Nivelación', done: typeof vt?.nivelacion?.desnivelMm === 'number' && vt.nivelacion.desnivelMm > 0 },
+        { id: 'vt-encuentros', label: 'Encuentros', done: (vt?.encuentrosCriticos?.length ?? 0) > 0 },
+        { id: 'vt-condiciones', label: 'Condiciones', done: (vt?.condicionesEspacio?.length ?? 0) > 0 },
+        { id: 'vt-fotos', label: 'Fotos', done: (vt?.registroFotografico?.length ?? 0) > 0 },
+        { id: 'vt-dictamen', label: 'Dictamen', done: !!vt?.dictamen },
+      ]} />
+
       {/* Datos básicos */}
-      <Section title="Datos de la visita y soporte">
-        <div className="grid grid-cols-2 gap-3">
+      <Section id="vt-datos" title="Datos de la visita y soporte">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="fechaVisita" className={labelCls}>Fecha de visita *</label>
             <input id="fechaVisita" type="date" {...register('fechaVisita')} className={inputCls} disabled={isLocked} />
@@ -282,7 +298,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
             </select>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="estadoSoporte" className={labelCls}>Estado del soporte *</label>
             <select id="estadoSoporte" {...register('estadoSoporte')} className={inputCls} disabled={isLocked}>
@@ -307,12 +323,12 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
       </Section>
 
       {/* Ambientes */}
-      <Section title="Ambientes">
+      <Section id="vt-ambientes" title="Ambientes">
         <div className="space-y-3">
           {ambientes.map((field, i) => (
             <div key={field.id} className="rounded-md border border-[rgba(43,45,47,0.12)] p-3 space-y-3">
-              <div className="flex gap-2 items-end">
-                <div className="flex-1">
+              <div className="flex flex-wrap gap-2 items-end">
+                <div className="flex-1 min-w-[8rem]">
                   <label htmlFor={`ambientes-${i}-nombre`} className="text-xs text-[#6B6155] mb-0.5 block">Nombre</label>
                   <input id={`ambientes-${i}-nombre`} {...register(`ambientes.${i}.nombre`)} className={inputCls} placeholder="Ej: Living" disabled={isLocked} />
                 </div>
@@ -341,8 +357,8 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
       </Section>
 
       {/* Humedad */}
-      <Section title="Humedad">
-        <div className="grid grid-cols-2 gap-3">
+      <Section id="vt-humedad" title="Humedad">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="humedad-medicionPct" className={labelCls}>Medición %</label>
             <input id="humedad-medicionPct" type="number" inputMode="decimal" {...register('humedad.medicionPct', { valueAsNumber: true })} className={inputCls} disabled={isLocked} />
@@ -364,8 +380,8 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
       </Section>
 
       {/* Nivelación */}
-      <Section title="Nivelación">
-        <div className="grid grid-cols-2 gap-3">
+      <Section id="vt-nivelacion" title="Nivelación">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="nivelacion-desnivelMm" className={labelCls}>Desnivel máximo (mm)</label>
             <input id="nivelacion-desnivelMm" type="number" inputMode="decimal" {...register('nivelacion.desnivelMm', { valueAsNumber: true })} className={inputCls} disabled={isLocked} />
@@ -380,8 +396,8 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
       </Section>
 
       {/* Encuentros críticos */}
-      <Section title="Encuentros críticos">
-        <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+      <Section id="vt-encuentros" title="Encuentros críticos">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4">
           {ENCUENTROS_CRITICOS.map((ec) => (
             <label key={ec} className="flex items-center gap-3 text-sm capitalize">
               <input type="checkbox" value={ec} {...register('encuentrosCriticos')} disabled={isLocked} />
@@ -392,8 +408,8 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
       </Section>
 
       {/* Condiciones del espacio */}
-      <Section title="Condiciones del espacio">
-        <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+      <Section id="vt-condiciones" title="Condiciones del espacio">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4">
           {CONDICIONES_ESPACIO.map((ce) => (
             <label key={ce} className="flex items-center gap-3 text-sm capitalize">
               <input type="checkbox" value={ce} {...register('condicionesEspacio')} disabled={isLocked} />
@@ -404,7 +420,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
       </Section>
 
       {/* Fotos */}
-      <Section title="Registro fotográfico">
+      <Section id="vt-fotos" title="Registro fotográfico">
         {!isLocked && (
           <label className="block">
             <span className="text-sm font-semibold text-[#C38A5A]">+ Agregar foto</span>
@@ -418,7 +434,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
           </label>
         )}
         {photoError && <p className="text-[12px] text-red-500 mt-1">{photoError}</p>}
-        <div className="grid grid-cols-3 gap-2 mt-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
           {((liveDoc as import('@/schemas').DocVT | null)?.registroFotografico ?? []).map((p) => (
             <PhotoThumb
               key={p.id}
@@ -431,7 +447,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
       </Section>
 
       {/* Dictamen */}
-      <Section title="Dictamen">
+      <Section id="vt-dictamen" title="Dictamen">
         <div className="space-y-2">
           {(['apto', 'apto_con_preparacion', 'no_apto'] as const).map((v) => (
             <label key={v} className="flex items-center gap-3 text-sm">
@@ -450,25 +466,24 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
         </div>
       </Section>
 
-      {/* Errores de validación pre-bloqueo */}
-      {lockErrors.length > 0 && (
-        <div className="border border-red-300/50 bg-red-50 rounded-lg px-4 py-3 space-y-1">
-          <p className="text-[13px] font-bold uppercase tracking-[0.14em] text-red-500">Completar antes de bloquear</p>
-          {lockErrors.map((e, i) => <p key={i} className="text-[13px] text-red-500">· {e}</p>)}
-        </div>
-      )}
-
-      {/* Acción de bloqueo */}
       {!isLocked && (
-        <button
-          type="button"
-          onClick={handleLock}
-          disabled={locking}
-          className="w-full font-bold text-[11px] uppercase tracking-[0.24em] rounded-md py-3.5 disabled:opacity-50 no-print transition-colors text-white"
-          style={{ background: '#C38A5A' }}
-        >
-          {locking ? 'Bloqueando…' : 'Marcar como completo'}
-        </button>
+        <DocActionBar>
+          {lockErrors.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-red-500">Completar antes de bloquear</p>
+              {lockErrors.map((e, i) => <p key={i} className="text-[12px] text-red-500">· {e}</p>)}
+            </div>
+          )}
+          <button
+            type="button"
+            onClick={handleLock}
+            disabled={locking}
+            className="w-full font-bold text-[11px] uppercase tracking-[0.24em] rounded-md py-3.5 disabled:opacity-50 transition-colors text-white"
+            style={{ background: '#C38A5A' }}
+          >
+            {locking ? 'Bloqueando…' : 'Marcar como completo'}
+          </button>
+        </DocActionBar>
       )}
     </form>
       <ConfirmDialog open={confirmOpen} message={confirmMessage} danger={confirmDanger} onConfirm={onConfirm} onCancel={onCancel} />

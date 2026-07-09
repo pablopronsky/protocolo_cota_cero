@@ -2,15 +2,19 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
-import SaveIndicator from '@/components/SaveIndicator';
-import { useDoc } from '@/hooks/useDoc';
-import { setDocStatus, writeRevision } from '@/lib/repo/projects';
+import { useDoc, offlineLockError } from '@/hooks/useDoc';
+import { setDocStatus, writeRevision, reopenDoc } from '@/lib/repo/projects';
 import { sequencingError } from '@/lib/sequencing';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
+import { Section } from '@/components/docs/Section';
+import { SectionNav } from '@/components/docs/SectionNav';
+import { DocActionBar } from '@/components/docs/DocActionBar';
+import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
 import { useConfirm } from '@/hooks/useConfirm';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import type { Project, DocOT, AnyDoc, DocType } from '@/schemas';
+import { useToast } from '@/contexts/ToastContext';
+import type { Project, DocOT, DocVT, AnyDoc, DocType } from '@/schemas';
 import { CRITERIOS_TECNICOS } from '@/schemas';
 import { useProtocolTemplate } from '@/hooks/useProtocolTemplate';
 import { templateSeedFor } from '@/lib/protocolDefaults';
@@ -28,13 +32,27 @@ const EMPTY_OT: Partial<DocOT> = {
   registroIncidencias: [], observaciones: '',
 };
 
+// El campo `paso` guardado debe coincidir con la posición mostrada: al eliminar
+// un paso intermedio quedaría desfasado (y el print usa el valor guardado).
+function normalizePasos<T extends Partial<DocOT>>(values: T): T {
+  if (!values.secuenciaEjecucion) return values;
+  return {
+    ...values,
+    secuenciaEjecucion: values.secuenciaEjecucion.map((p, i) => ({ ...p, paso: i + 1 })),
+  };
+}
+
 export default function OTForm({ projectCode, project, upstream, docData }: Props) {
-  const { user } = useAuth();
-  const { docData: liveDoc, saveState, autosave, cancelAutosave } = useDoc(projectCode, 'OT');
+  const { user, role } = useAuth();
+  const { showToast } = useToast();
+  const { docData: liveDoc, autosave, cancelAutosave } = useDoc(projectCode, 'OT');
   const seedDoc = docData as DocOT | null;
   const ot = (liveDoc as DocOT | null) ?? seedDoc;
-  const isLocked = ot?.status === 'completo' || ot?.status === 'firmado';
+  const isArchived = project.status === 'archivado';
+  const isLocked = ot?.status === 'completo' || ot?.status === 'firmado' || isArchived;
+  const vtNoApto = (upstream.VT as DocVT | undefined)?.dictamen === 'no_apto';
   const [locking, setLocking] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [lockErrors, setLockErrors] = useState<string[]>([]);
   const { confirmOpen, confirmMessage, openConfirm, onConfirm, onCancel } = useConfirm();
   const { template, loading: tplLoading } = useProtocolTemplate();
@@ -64,18 +82,22 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
     seededRef.current = true;
   }, [seedDoc?.updatedAt, template, tplLoading]); // eslint-disable-line
 
-  // Autosave: gatear en type==='change' para evitar autosave fantasma al hacer reset() (#6).
+  // Autosave: gatear en `name` — reset() (seed, #6) emite sin name; las ediciones
+  // del usuario (inputs nativos, setValue y operaciones de field arrays) siempre
+  // lo traen. Gatear en type==='change' perdía los removes de filas y los setValue.
   useEffect(() => {
-    const sub = watch((values, { type }) => {
-      if (type !== 'change') return;
+    const sub = watch((values, { name }) => {
+      if (!name) return;
       if (isLocked) return;
-      autosave(values as Partial<DocOT>, project.status);
+      autosave(normalizePasos(values as Partial<DocOT>), project.status);
     });
     return () => sub.unsubscribe();
   }, [watch, isLocked, autosave, project.status]);
 
   async function handleLock() {
-    const values = getValues();
+    const offline = offlineLockError();
+    if (offline) { setLockErrors([offline]); return; }
+    const values = normalizePasos(getValues());
     const errs: string[] = [];
     if (!values.fechaInicio) errs.push('Fecha de inicio requerida');
     if (!values.alcance?.trim()) errs.push('Alcance de la obra requerido');
@@ -104,19 +126,48 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
   const labelCls = 'block text-[13px] font-semibold text-[#6B6155] mb-1.5';
   const ro = seed.readonly as Record<string, unknown>;
 
+  async function handleReopen() {
+    if (!await openConfirm('¿Reabrir este documento? Volverá a "en progreso" y quedará editable.', { danger: true })) return;
+    setReopening(true);
+    try {
+      await reopenDoc(projectCode, 'OT', user?.uid ?? '');
+      await writeRevision(projectCode, 'OT', 'en_progreso', (ot ?? {}) as Record<string, unknown>, (ot?.version ?? 0) + 1, user?.uid ?? '');
+      showToast('Documento reabierto', 'success');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'No se pudo reabrir el documento.', 'error');
+    } finally {
+      setReopening(false);
+    }
+  }
+
   return (
     <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-[#6B6155] capitalize">{ot?.status ?? 'vacio'}</span>
-        <SaveIndicator state={saveState} />
-      </div>
-
-      {isLocked && (
-        <div className="bg-[#2B2D2F] text-[#F5F2ED] rounded-lg px-4 py-3 text-sm">
-          Documento bloqueado · Solo lectura
+      {vtNoApto && (
+        <div className="bg-red-50 border border-red-300/50 rounded-lg px-4 py-3 text-[13px] text-red-600">
+          ⚠ La visita técnica dictaminó el soporte como <strong>NO APTO</strong>. Verificá que la preparación (EP) lo haya resuelto antes de ejecutar la obra.
         </div>
       )}
+
+      {!isArchived && isLocked && (
+        <div className="bg-[#2B2D2F] text-[#F5F2ED] rounded-lg px-4 py-3 text-sm flex items-center justify-between gap-3 flex-wrap">
+          <span>Documento bloqueado · Solo lectura</span>
+          {role === 'admin' && (
+            <Button variant="danger" size="sm" onClick={handleReopen} disabled={reopening}>
+              {reopening ? 'Reabriendo…' : 'Reabrir'}
+            </Button>
+          )}
+        </div>
+      )}
+
+      <SectionNav sections={[
+        { id: 'ot-equipo', label: 'Equipo', done: (ot?.equipo?.length ?? 0) > 0 },
+        { id: 'ot-fechas', label: 'Fechas y alcance', done: !!ot?.fechaInicio && !!ot?.alcance?.trim() },
+        { id: 'ot-secuencia', label: 'Secuencia', done: (ot?.secuenciaEjecucion?.length ?? 0) > 0 },
+        { id: 'ot-criterios', label: 'Criterios', done: (ot?.criteriosTecnicos?.length ?? 0) > 0 },
+        { id: 'ot-materiales', label: 'Materiales', done: (ot?.materialesHerramientas?.length ?? 0) > 0 },
+        { id: 'ot-incidencias', label: 'Incidencias', done: (ot?.registroIncidencias?.length ?? 0) > 0 },
+      ]} />
 
       {/* Heredados readonly */}
       <div className="bg-[#F5F2ED] border border-[rgba(43,45,47,0.08)] rounded-lg px-4 py-3 space-y-2">
@@ -131,15 +182,14 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
       </div>
 
       {/* Equipo */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Equipo</p>
+      <Section id="ot-equipo" title="Equipo">
         {equipo.map((f, i) => (
-          <div key={f.id} className="flex gap-2 items-end">
-            <div className="flex-1">
+          <div key={f.id} className="flex flex-wrap gap-2 items-end">
+            <div className="flex-1 min-w-[8rem]">
               <label htmlFor={`equipo-${i}-nombre`} className="text-xs text-[#6B6155] block mb-0.5">Nombre</label>
               <input id={`equipo-${i}-nombre`} {...register(`equipo.${i}.nombre`)} className={inputCls} disabled={isLocked} />
             </div>
-            <div className="flex-1">
+            <div className="flex-1 min-w-[8rem]">
               <label htmlFor={`equipo-${i}-rol`} className="text-xs text-[#6B6155] block mb-0.5">Rol</label>
               <input id={`equipo-${i}-rol`} {...register(`equipo.${i}.rol`)} className={inputCls} disabled={isLocked} />
             </div>
@@ -147,11 +197,11 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
           </div>
         ))}
         {!isLocked && <button type="button" onClick={() => addEquipo({ nombre: '', rol: '' })} className="text-sm text-[#C38A5A] font-semibold">+ Agregar</button>}
-      </div>
+      </Section>
 
       {/* Fechas y alcance */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <div className="grid grid-cols-2 gap-3">
+      <Section id="ot-fechas" title="Fechas y alcance">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="fechaInicio" className={labelCls}>Fecha inicio</label>
             <input id="fechaInicio" type="date" {...register('fechaInicio')} className={inputCls} disabled={isLocked} />
@@ -165,11 +215,10 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
           <label htmlFor="alcance" className={labelCls}>Alcance de la obra *</label>
           <textarea id="alcance" rows={3} {...register('alcance')} className={inputCls} disabled={isLocked} placeholder="Descripción general del trabajo a realizar…" />
         </div>
-      </div>
+      </Section>
 
       {/* Secuencia de ejecución */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Secuencia de ejecución</p>
+      <Section id="ot-secuencia" title="Secuencia de ejecución">
         {secuencia.map((f, i) => (
           <div key={f.id} className="border border-[rgba(43,45,47,0.10)] rounded-md px-3 py-2 space-y-2">
             <div className="flex items-center justify-between">
@@ -187,12 +236,11 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
           <button type="button" onClick={() => addPaso({ paso: secuencia.length + 1, descripcion: '', completado: false })}
             className="text-sm text-[#C38A5A] font-semibold">+ Agregar paso</button>
         )}
-      </div>
+      </Section>
 
       {/* Criterios técnicos */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Criterios técnicos</p>
-        <div className="grid grid-cols-2 gap-y-3 gap-x-4">
+      <Section id="ot-criterios" title="Criterios técnicos">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4">
           {CRITERIOS_TECNICOS.map((c) => (
             <label key={c} className="flex items-center gap-3 text-sm capitalize">
               <input type="checkbox" value={c} {...register('criteriosTecnicos')} disabled={isLocked} />
@@ -200,14 +248,13 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
             </label>
           ))}
         </div>
-      </div>
+      </Section>
 
       {/* Materiales y herramientas */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Materiales y herramientas</p>
+      <Section id="ot-materiales" title="Materiales y herramientas">
         {materiales.map((f, i) => (
-          <div key={f.id} className="flex gap-2 items-end">
-            <div className="flex-1"><input placeholder="Item" {...register(`materialesHerramientas.${i}.item`)} className={inputCls} disabled={isLocked} /></div>
+          <div key={f.id} className="flex flex-wrap gap-2 items-end">
+            <div className="flex-1 min-w-[8rem]"><input placeholder="Item" {...register(`materialesHerramientas.${i}.item`)} className={inputCls} disabled={isLocked} /></div>
             <div className="w-20"><input type="number" placeholder="Cant." {...register(`materialesHerramientas.${i}.cantidad`, { valueAsNumber: true })} className={inputCls} disabled={isLocked} /></div>
             <div className="w-28">
               <select {...register(`materialesHerramientas.${i}.provistoPor`)} className={inputCls} disabled={isLocked}>
@@ -219,11 +266,10 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
           </div>
         ))}
         {!isLocked && <button type="button" onClick={() => addMaterial({ item: '', cantidad: 1, provistoPor: 'cota_cero' })} className="text-sm text-[#C38A5A] font-semibold">+ Agregar</button>}
-      </div>
+      </Section>
 
       {/* Registro de incidencias */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Registro de incidencias</p>
+      <Section id="ot-incidencias" title="Registro de incidencias">
         {incidencias.map((f, i) => (
           <div key={f.id} className="border border-[rgba(43,45,47,0.10)] rounded-md px-3 py-2 space-y-2">
             <div className="flex gap-2">
@@ -239,25 +285,26 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
           </div>
         ))}
         {!isLocked && <button type="button" onClick={() => addIncidencia({ fecha: '', descripcion: '', accion: '', resuelto: false })} className="text-sm text-[#C38A5A] font-semibold">+ Agregar incidencia</button>}
-      </div>
+      </Section>
 
       <div>
         <label htmlFor="otObservaciones" className={labelCls}>Observaciones</label>
         <textarea id="otObservaciones" rows={3} {...register('observaciones')} className={inputCls} disabled={isLocked} />
       </div>
 
-      {lockErrors.length > 0 && (
-        <div className="border border-red-300/50 bg-red-50 rounded-lg px-4 py-3 space-y-1">
-          <p className="text-[13px] font-bold uppercase tracking-[0.14em] text-red-500">Completar antes de bloquear</p>
-          {lockErrors.map((e, i) => <p key={i} className="text-[13px] text-red-500">· {e}</p>)}
-        </div>
-      )}
-
       {!isLocked && (
-        <button type="button" onClick={handleLock} disabled={locking}
-          className="w-full text-white font-bold text-[11px] uppercase tracking-[0.24em] rounded-md py-3.5 disabled:opacity-50 no-print transition-colors" style={{ background: '#C38A5A' }}>
-          {locking ? 'Bloqueando…' : 'Marcar como completo'}
-        </button>
+        <DocActionBar>
+          {lockErrors.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-red-500">Completar antes de bloquear</p>
+              {lockErrors.map((e, i) => <p key={i} className="text-[12px] text-red-500">· {e}</p>)}
+            </div>
+          )}
+          <button type="button" onClick={handleLock} disabled={locking}
+            className="w-full text-white font-bold text-[11px] uppercase tracking-[0.24em] rounded-md py-3.5 disabled:opacity-50 transition-colors" style={{ background: '#C38A5A' }}>
+            {locking ? 'Bloqueando…' : 'Marcar como completo'}
+          </button>
+        </DocActionBar>
       )}
     </form>
       <ConfirmDialog open={confirmOpen} message={confirmMessage} onConfirm={onConfirm} onCancel={onCancel} />

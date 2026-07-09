@@ -20,6 +20,22 @@
   --font-mono: 'Roboto Mono', monospace;
 }
 
+/* ── Transition tokens ──────────────────────────────────── */
+:root {
+  --transition-fast: 150ms ease;
+  --transition-base: 200ms ease;
+}
+
+/* ── Accesibilidad: respeta prefers-reduced-motion ──────── */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 html {
   font-family: 'Roboto', sans-serif;
   font-size: 16px;

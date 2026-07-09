@@ -1,13 +1,28 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth, logout } from '@/hooks/useAuth';
 import { initPhotoQueueListener } from '@/lib/photos';
 import Logo from '@/components/Logo';
+import { GlobalSearch } from '@/components/GlobalSearch';
+import { SaveStatusProvider, useSaveStatusContext } from '@/contexts/SaveStatusContext';
+import { ToastProvider } from '@/contexts/ToastContext';
+import SaveIndicator from '@/components/SaveIndicator';
 
 const APP_VERSION = '2.6.0';
+
+const IconMenu = () => (
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
+    <path d="M2 5h14M2 9h14M2 13h14" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
+const IconClose = () => (
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+    <path d="M3 3l10 10M13 3L3 13" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+  </svg>
+);
 
 /* ── Sidebar icons ──────────────────────────────────────── */
 const IconPrincipio = () => (
@@ -71,10 +86,36 @@ function NavItem({
   );
 }
 
+function HeaderSaveStatus() {
+  const ctx = useSaveStatusContext();
+  if (!ctx) return null;
+  return <SaveIndicator state={!ctx.online ? 'offline' : ctx.docState} />;
+}
+
+// #27 — Avisa antes de cerrar/recargar si hay un guardado en curso (ventana del
+// debounce de autosave + la escritura misma). No cubre navegación in-app: los
+// forms cancelan el autosave pendiente antes de bloquear/firmar, que es el único
+// flujo que fuerza una navegación propia.
+function UnsavedChangesGuard() {
+  const ctx = useSaveStatusContext();
+  useEffect(() => {
+    function onBeforeUnload(e: BeforeUnloadEvent) {
+      if (ctx?.docState === 'saving') {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    }
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [ctx?.docState]);
+  return null;
+}
+
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, role, loading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
@@ -84,6 +125,21 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     const cleanup = initPhotoQueueListener();
     return cleanup;
   }, []);
+
+  // Cierra el drawer mobile al navegar.
+  useEffect(() => {
+    setDrawerOpen(false);
+  }, [pathname]);
+
+  // Cierra el drawer con Escape.
+  useEffect(() => {
+    if (!drawerOpen) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setDrawerOpen(false);
+    }
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [drawerOpen]);
 
   if (loading || !user) {
     return (
@@ -98,18 +154,42 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   ).toUpperCase();
 
   return (
+    <SaveStatusProvider>
+    <ToastProvider>
+    <UnsavedChangesGuard />
     <div className="min-h-dvh flex bg-[#F5F2ED]">
-      {/* ── Sidebar ──────────────────────────────────────── */}
-      <aside className="w-[188px] shrink-0 bg-[#1A1B1D] flex flex-col sticky top-0 h-dvh z-10">
+      {/* ── Overlay (mobile drawer) ────────────────────────── */}
+      {drawerOpen && (
+        <div
+          className="fixed inset-0 bg-black/40 z-20 lg:hidden"
+          onClick={() => setDrawerOpen(false)}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* ── Sidebar / drawer ───────────────────────────────── */}
+      <aside
+        className={`fixed inset-y-0 left-0 z-30 w-[188px] shrink-0 bg-[#1A1B1D] flex flex-col h-dvh transform transition-transform duration-200 lg:translate-x-0 lg:sticky lg:top-0 lg:z-10 ${
+          drawerOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}
+        aria-label="Navegación principal"
+      >
         {/* Logo */}
-        <Link
-          href="/projects"
-          className="block px-5 pt-5 pb-5 border-b border-white/[0.06]"
-        >
-          <span className="text-[#F5F2ED]">
-            <Logo size="sm" />
-          </span>
-        </Link>
+        <div className="flex items-center justify-between px-5 pt-5 pb-5 border-b border-white/[0.06]">
+          <Link href="/projects" className="block" onClick={() => setDrawerOpen(false)}>
+            <span className="text-[#F5F2ED]">
+              <Logo size="sm" />
+            </span>
+          </Link>
+          <button
+            type="button"
+            className="lg:hidden text-[#B8AEA3] hover:text-[#F5F2ED] p-1"
+            onClick={() => setDrawerOpen(false)}
+            aria-label="Cerrar menú"
+          >
+            <IconClose />
+          </button>
+        </div>
 
         {/* Nav */}
         <nav className="flex-1 pt-6 flex flex-col gap-0.5 px-2">
@@ -162,8 +242,26 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       {/* ── Content pane ─────────────────────────────────── */}
       <div className="flex-1 min-w-0 flex flex-col">
         {/* Top bar */}
-        <header className="h-11 px-8 flex items-center justify-end gap-6 border-b border-[rgba(43,45,47,0.08)] shrink-0 bg-[#F5F2ED]">
-          <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2B2D2F]/80">
+        <header className="h-11 px-4 lg:px-8 flex items-center gap-3 lg:gap-6 border-b border-[rgba(43,45,47,0.08)] shrink-0 bg-[#F5F2ED]">
+          <button
+            type="button"
+            className="lg:hidden text-[#2B2D2F] p-1 -ml-1"
+            onClick={() => setDrawerOpen(true)}
+            aria-label="Abrir menú"
+          >
+            <IconMenu />
+          </button>
+          <span className="lg:hidden text-[#2B2D2F]">
+            <Logo size="xs" />
+          </span>
+          <div className="flex-1 hidden md:flex justify-center px-2">
+            <div className="w-full max-w-[280px]">
+              <GlobalSearch />
+            </div>
+          </div>
+          <div className="flex-1 md:hidden" />
+          <HeaderSaveStatus />
+          <span className="hidden sm:flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.22em] text-[#2B2D2F]/80">
             {displayName}
           </span>
           <button
@@ -175,10 +273,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         </header>
 
         {/* Page */}
-        <main className="flex-1 px-8 py-8 overflow-x-auto">
+        <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8 overflow-x-auto">
           {children}
         </main>
       </div>
     </div>
+    </ToastProvider>
+    </SaveStatusProvider>
   );
 }

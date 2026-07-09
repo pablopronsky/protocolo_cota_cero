@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { listClients } from '@/lib/repo/clients';
 import { listAllProjects } from '@/lib/repo/projects';
+import { Card } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
 import type { Client, Project } from '@/schemas';
 
 /* ── Icons ──────────────────────────────────────────────── */
@@ -21,6 +24,12 @@ const IconChevronLeft = () => (
 const IconChevronRight = () => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
     <path d="M6 12l4-4-4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+const IconClientesEmpty = () => (
+  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+    <circle cx="16" cy="11" r="5" stroke="currentColor" strokeWidth="1.6"/>
+    <path d="M5 27c0-6.075 4.925-9.5 11-9.5s11 3.425 11 9.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round"/>
   </svg>
 );
 
@@ -100,7 +109,7 @@ export default function ClientsPage() {
       </div>
 
       {/* ── Filter ───────────────────────────────────────── */}
-      <div className="relative flex-1 max-w-[480px]">
+      <div className="relative flex-1 sm:max-w-[480px]">
         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B6155] pointer-events-none">
           <IconSearch />
         </span>
@@ -115,8 +124,10 @@ export default function ClientsPage() {
 
       {/* ── Loading ──────────────────────────────────────── */}
       {loading && (
-        <div className="py-24 text-center">
-          <span className="text-[11px] font-mono uppercase tracking-[0.28em] text-[#6B6155]">Cargando…</span>
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 rounded-lg" />
+          ))}
         </div>
       )}
 
@@ -124,15 +135,44 @@ export default function ClientsPage() {
       {!loading && (
         <>
           {filtered.length === 0 ? (
-            <div className="py-24 text-center border border-dashed border-[#B8AEA3]/20 rounded-lg">
-              <p className="text-[13px] text-[#6B6155]">
-                {rows.length === 0
-                  ? 'Todavía no hay clientes. Se crean al dar de alta proyectos.'
-                  : 'Sin clientes que coincidan.'}
-              </p>
-            </div>
+            <EmptyState
+              icon={<IconClientesEmpty />}
+              title={rows.length === 0 ? 'Todavía no hay clientes' : 'Sin clientes que coincidan'}
+              description={
+                rows.length === 0
+                  ? 'Se crean automáticamente al dar de alta un proyecto.'
+                  : 'Probá ajustar la búsqueda.'
+              }
+            />
           ) : (
-            <div className="bg-white border border-[rgba(43,45,47,0.09)] rounded-lg overflow-hidden">
+            <>
+            {/* Mobile: stacked cards */}
+            <div className="sm:hidden space-y-2">
+              {paginated.map((c) => (
+                <div key={c.id} onClick={() => router.push(`/clients/${encodeURIComponent(c.id)}`)} className="cursor-pointer">
+                  <Card>
+                    <div className="flex items-start justify-between gap-2 mb-1">
+                      <span className="font-bold text-[14px] text-[#2B2D2F] tracking-tight">{c.nombre}</span>
+                      {c.activeCount > 0 && (
+                        <span className="inline-block text-[10px] font-bold uppercase tracking-[0.16em] px-2 py-0.5 rounded-sm bg-[#C38A5A]/18 text-[#9C5F2E] shrink-0">
+                          {c.activeCount} activo{c.activeCount !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                    </div>
+                    {c.dni_cuit && <p className="text-[11px] font-mono text-[#6B6155] mb-2">{c.dni_cuit}</p>}
+                    <p className="text-[13px] text-[#2B2D2F]">{c.telefono || '—'}</p>
+                    {c.email && <p className="text-[12px] text-[#6B6155]">{c.email}</p>}
+                    <div className="flex items-center justify-between mt-2 pt-2 border-t border-[rgba(43,45,47,0.06)]">
+                      <span className="text-[12px] font-bold text-[#2B2D2F] font-mono">{c.projectCount} proyecto{c.projectCount !== 1 ? 's' : ''}</span>
+                      <span className="text-[12px] text-[#6B6155]">{fmtDate(c.lastActivity)}</span>
+                    </div>
+                  </Card>
+                </div>
+              ))}
+            </div>
+
+            {/* Desktop/tablet: table */}
+            <div className="hidden sm:block bg-white border border-[rgba(43,45,47,0.09)] rounded-lg overflow-hidden overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-[rgba(43,45,47,0.07)]">
@@ -185,10 +225,11 @@ export default function ClientsPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           {filtered.length > 0 && (
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
               <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#6B6155]">
                 {filtered.length} Cliente{filtered.length !== 1 ? 's' : ''}
               </span>

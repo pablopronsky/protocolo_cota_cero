@@ -5,6 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { listAllProjects } from '@/lib/repo/projects';
 import { useAuth } from '@/hooks/useAuth';
+import { Card } from '@/components/ui/Card';
+import { Skeleton } from '@/components/ui/Skeleton';
+import { EmptyState } from '@/components/ui/EmptyState';
 import type { Project, DocStatus } from '@/schemas';
 import { DOC_ORDER } from '@/schemas';
 
@@ -13,11 +16,6 @@ const IconSearch = () => (
   <svg width="13" height="13" viewBox="0 0 16 16" fill="none">
     <circle cx="6.5" cy="6.5" r="5" stroke="currentColor" strokeWidth="1.5"/>
     <path d="M10.5 10.5L14 14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/>
-  </svg>
-);
-const IconEdit = () => (
-  <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
-    <path d="M11.5 2.5l2 2L5 13H3v-2L11.5 2.5z" stroke="currentColor" strokeWidth="1.3" strokeLinejoin="round"/>
   </svg>
 );
 const IconEye = () => (
@@ -34,6 +32,12 @@ const IconChevronLeft = () => (
 const IconChevronRight = () => (
   <svg width="14" height="14" viewBox="0 0 16 16" fill="none">
     <path d="M6 12l4-4-4-4" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"/>
+  </svg>
+);
+const IconProyectosEmpty = () => (
+  <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+    <rect x="4" y="10" width="24" height="16" rx="2" stroke="currentColor" strokeWidth="1.6"/>
+    <path d="M4 10l3-4h10l2 4" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round"/>
   </svg>
 );
 
@@ -99,7 +103,7 @@ export default function ProjectsPage() {
   return (
     <div className="space-y-7 min-w-0">
       {/* ── Page header ──────────────────────────────────── */}
-      <div className="flex items-start justify-between gap-6">
+      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           {/* Step indicator */}
           <div className="flex items-center gap-3 mb-3">
@@ -120,7 +124,7 @@ export default function ProjectsPage() {
           </h1>
           {!loading && (
             <p className="mt-2 text-[13px] text-[#6B6155]">
-              {filtered.length} proyecto{filtered.length !== 1 ? 's' : ''} activo{filtered.length !== 1 ? 's' : ''}
+              {filtered.length} proyecto{filtered.length !== 1 ? 's' : ''}
             </p>
           )}
         </div>
@@ -136,8 +140,8 @@ export default function ProjectsPage() {
       </div>
 
       {/* ── Filters ──────────────────────────────────────── */}
-      <div className="flex gap-3">
-        <div className="relative flex-1 max-w-[480px]">
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1 sm:max-w-[480px]">
           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B6155] pointer-events-none">
             <IconSearch />
           </span>
@@ -174,10 +178,10 @@ export default function ProjectsPage() {
 
       {/* ── Loading ───────────────────────────────────────── */}
       {loading && (
-        <div className="py-24 text-center">
-          <span className="text-[11px] font-mono uppercase tracking-[0.28em] text-[#6B6155]">
-            Cargando…
-          </span>
+        <div className="space-y-2">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={i} className="h-16 rounded-lg" />
+          ))}
         </div>
       )}
 
@@ -185,11 +189,57 @@ export default function ProjectsPage() {
       {!loading && (
         <>
           {filtered.length === 0 ? (
-            <div className="py-24 text-center border border-dashed border-[#B8AEA3]/20 rounded-lg">
-              <p className="text-[13px] text-[#6B6155]">Sin proyectos que coincidan.</p>
-            </div>
+            <EmptyState
+              icon={<IconProyectosEmpty />}
+              title={allProjects.length === 0 ? 'Todavía no hay proyectos' : 'Sin proyectos que coincidan'}
+              description={
+                allProjects.length === 0
+                  ? 'Los proyectos que crees van a aparecer acá.'
+                  : 'Probá ajustar la búsqueda o el filtro de estado.'
+              }
+              action={
+                allProjects.length === 0 && role === 'admin' ? (
+                  <Link
+                    href="/projects/new"
+                    className="mt-1 border border-[#2B2D2F]/25 text-[#2B2D2F] text-[11px] font-bold uppercase tracking-[0.22em] px-5 py-2.5 rounded hover:border-[#C38A5A] hover:text-[#C38A5A] transition-colors"
+                  >
+                    + Nuevo Proyecto
+                  </Link>
+                ) : undefined
+              }
+            />
           ) : (
-            <div className="bg-white border border-[rgba(43,45,47,0.09)] rounded-lg overflow-hidden">
+            <>
+            {/* Mobile: stacked cards */}
+            <div className="sm:hidden space-y-2">
+              {paginated.map((p) => {
+                const badge = STATUS_BADGE[p.status] ?? STATUS_BADGE.borrador;
+                const progress = calcProgress(p.docStatus);
+                return (
+                  <div key={p.code} onClick={() => router.push(`/projects/${p.code}`)} className="cursor-pointer">
+                    <Card>
+                      <div className="flex items-center justify-between gap-2 mb-2">
+                        <span className="font-bold text-[14px] text-[#2B2D2F] tracking-tight">{p.code}</span>
+                        <span className={`inline-block text-[10px] font-bold uppercase tracking-[0.16em] px-2.5 py-1 rounded-sm shrink-0 ${badge.bg} ${badge.text}`}>
+                          {badge.label}
+                        </span>
+                      </div>
+                      <p className="text-[13px] text-[#2B2D2F] mb-1">{p.clienteNombre}</p>
+                      <p className="text-[12px] text-[#6B6155] mb-3">{fmtDate(p.createdAt)}</p>
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 h-1.5 bg-[#B8AEA3]/20 rounded-full overflow-hidden">
+                          <div className="h-full bg-[#C38A5A] rounded-full transition-all" style={{ width: `${progress}%` }} />
+                        </div>
+                        <span className="text-[12px] text-[#6B6155] font-mono w-8">{progress}%</span>
+                      </div>
+                    </Card>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop/tablet: table */}
+            <div className="hidden sm:block bg-white border border-[rgba(43,45,47,0.09)] rounded-lg overflow-hidden overflow-x-auto">
               <table className="w-full text-left border-collapse">
                 <thead>
                   <tr className="border-b border-[rgba(43,45,47,0.07)]">
@@ -255,26 +305,14 @@ export default function ProjectsPage() {
                         </td>
                         {/* Acciones */}
                         <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
-                          <div className="flex items-center gap-1">
-                            {role === 'admin' && (
-                              <Link
-                                href={`/projects/${p.code}`}
-                                className="p-2.5 -m-2.5 text-[#6B6155] hover:text-[#C38A5A] transition-colors"
-                                title="Editar"
-                                aria-label={`Editar proyecto ${p.code}`}
-                              >
-                                <IconEdit />
-                              </Link>
-                            )}
-                            <Link
-                              href={`/projects/${p.code}`}
-                              className="p-2.5 -m-2.5 text-[#6B6155] hover:text-[#C38A5A] transition-colors"
-                              title="Ver"
-                              aria-label={`Ver proyecto ${p.code}`}
-                            >
-                              <IconEye />
-                            </Link>
-                          </div>
+                          <Link
+                            href={`/projects/${p.code}`}
+                            className="p-2.5 -m-2.5 text-[#6B6155] hover:text-[#C38A5A] transition-colors inline-flex"
+                            title="Ver"
+                            aria-label={`Ver proyecto ${p.code}`}
+                          >
+                            <IconEye />
+                          </Link>
                         </td>
                       </tr>
                     );
@@ -282,11 +320,12 @@ export default function ProjectsPage() {
                 </tbody>
               </table>
             </div>
+            </>
           )}
 
           {/* ── Table footer ──────────────────────────────── */}
           {filtered.length > 0 && (
-            <div className="flex items-center justify-between pt-1">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
               <span className="text-[11px] font-bold uppercase tracking-[0.22em] text-[#6B6155]">
                 {filtered.length} Proyecto{filtered.length !== 1 ? 's' : ''}
               </span>

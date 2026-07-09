@@ -8,16 +8,45 @@ import { listClients } from '@/lib/repo/clients';
 import type { Client } from '@/schemas';
 
 /* ── Client picker ──────────────────────────────────────── */
+export interface NewClientForm {
+  nombre: string;
+  contacto: string;
+  telefono: string;
+  email: string;
+  dni_cuit: string;
+}
+
+export const EMPTY_NEW_CLIENT: NewClientForm = { nombre: '', contacto: '', telefono: '', email: '', dni_cuit: '' };
+
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// #22 — Validación real del sub-form de cliente nuevo (reemplaza el hidden-input
+// hack: antes se duplicaban los valores en inputs ocultos solo para que
+// `FormData` los capturara; ahora el estado vive en el padre y se valida acá).
+export function validateNewClient(f: NewClientForm): Partial<Record<keyof NewClientForm, string>> {
+  const errs: Partial<Record<keyof NewClientForm, string>> = {};
+  if (!f.nombre.trim()) errs.nombre = 'Nombre requerido';
+  if (!f.contacto.trim()) errs.contacto = 'Contacto requerido';
+  if (!f.telefono.trim()) errs.telefono = 'Teléfono requerido';
+  if (f.email.trim() && !EMAIL_RE.test(f.email.trim())) errs.email = 'Email inválido';
+  return errs;
+}
+
 interface ClientPickerProps {
   selected: Client | null;
   onSelect: (c: Client | null) => void;
+  showNew: boolean;
+  onShowNewChange: (v: boolean) => void;
+  newForm: NewClientForm;
+  onNewFormChange: (f: NewClientForm) => void;
+  newFormErrors: Partial<Record<keyof NewClientForm, string>>;
 }
 
-function ClientPicker({ selected, onSelect }: ClientPickerProps) {
+function ClientPicker({
+  selected, onSelect, showNew, onShowNewChange, newForm, onNewFormChange, newFormErrors,
+}: ClientPickerProps) {
   const [clients, setClients] = useState<Client[]>([]);
   const [query, setQuery] = useState('');
-  const [showNew, setShowNew] = useState(false);
-  const [newForm, setNewForm] = useState({ nombre: '', contacto: '', telefono: '', email: '', dni_cuit: '' });
 
   useEffect(() => { listClients().then(setClients); }, []);
 
@@ -95,7 +124,7 @@ function ClientPicker({ selected, onSelect }: ClientPickerProps) {
           )}
           <button
             type="button"
-            onClick={() => setShowNew(true)}
+            onClick={() => onShowNewChange(true)}
             className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155] hover:text-[#C38A5A] transition-colors"
           >
             + Nuevo cliente
@@ -103,46 +132,44 @@ function ClientPicker({ selected, onSelect }: ClientPickerProps) {
         </>
       )}
 
-      {/* New client inline form — only fields, submission is part of the main form */}
+      {/* New client inline form — estado en el padre, validado antes de crear el proyecto */}
       {showNew && (
         <div className="space-y-3">
           <div>
             <label className={labelCls}>Nombre *</label>
-            <input value={newForm.nombre} onChange={(e) => setNewForm((f) => ({ ...f, nombre: e.target.value }))} className={inputCls} required />
+            <input value={newForm.nombre} onChange={(e) => onNewFormChange({ ...newForm, nombre: e.target.value })} className={inputCls} />
+            {newFormErrors.nombre && <p className="text-[12px] text-red-500 mt-1">{newFormErrors.nombre}</p>}
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Contacto *</label>
-              <input value={newForm.contacto} onChange={(e) => setNewForm((f) => ({ ...f, contacto: e.target.value }))} className={inputCls} required />
+              <input value={newForm.contacto} onChange={(e) => onNewFormChange({ ...newForm, contacto: e.target.value })} className={inputCls} />
+              {newFormErrors.contacto && <p className="text-[12px] text-red-500 mt-1">{newFormErrors.contacto}</p>}
             </div>
             <div>
               <label className={labelCls}>Teléfono *</label>
-              <input type="tel" value={newForm.telefono} onChange={(e) => setNewForm((f) => ({ ...f, telefono: e.target.value }))} className={inputCls} required />
+              <input type="tel" value={newForm.telefono} onChange={(e) => onNewFormChange({ ...newForm, telefono: e.target.value })} className={inputCls} />
+              {newFormErrors.telefono && <p className="text-[12px] text-red-500 mt-1">{newFormErrors.telefono}</p>}
             </div>
           </div>
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className={labelCls}>Email</label>
-              <input type="email" value={newForm.email} onChange={(e) => setNewForm((f) => ({ ...f, email: e.target.value }))} className={inputCls} />
+              <input type="email" value={newForm.email} onChange={(e) => onNewFormChange({ ...newForm, email: e.target.value })} className={inputCls} />
+              {newFormErrors.email && <p className="text-[12px] text-red-500 mt-1">{newFormErrors.email}</p>}
             </div>
             <div>
               <label className={labelCls}>DNI / CUIT</label>
-              <input value={newForm.dni_cuit} onChange={(e) => setNewForm((f) => ({ ...f, dni_cuit: e.target.value }))} className={inputCls} />
+              <input value={newForm.dni_cuit} onChange={(e) => onNewFormChange({ ...newForm, dni_cuit: e.target.value })} className={inputCls} />
             </div>
           </div>
           <button
             type="button"
-            onClick={() => setShowNew(false)}
+            onClick={() => onShowNewChange(false)}
             className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155] hover:text-[#C38A5A] transition-colors"
           >
             ← Buscar existente
           </button>
-          {/* Hidden inputs so el form principal los capture */}
-          <input type="hidden" name="clienteNombre"   value={newForm.nombre} />
-          <input type="hidden" name="clienteContacto" value={newForm.contacto} />
-          <input type="hidden" name="clienteTelefono" value={newForm.telefono} />
-          <input type="hidden" name="clienteEmail"    value={newForm.email} />
-          <input type="hidden" name="clienteDniCuit"  value={newForm.dni_cuit} />
         </div>
       )}
     </div>
@@ -158,6 +185,10 @@ function NewProjectForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [selectedClient, setSelectedClient] = useState<Client | null>(null);
+  const [showNewClient, setShowNewClient] = useState(false);
+  const [newClient, setNewClient] = useState<NewClientForm>(EMPTY_NEW_CLIENT);
+  const [attemptedSubmit, setAttemptedSubmit] = useState(false);
+  const newClientErrors = attemptedSubmit ? validateNewClient(newClient) : {};
 
   // Prefill cuando se llega desde la ficha de un cliente
   const prefillId   = searchParams.get('clienteId');
@@ -184,23 +215,26 @@ function NewProjectForm() {
     setError('');
     if (!user) { setError('Sesión no válida. Volvé a ingresar.'); return; }
 
-    const fd = new FormData(e.currentTarget);
-
     // Construir el payload: cliente existente vs nuevo
     const body: Record<string, unknown> = { ...form };
-    if (selectedClient && selectedClient.contacto) {
-      // Cliente existente con datos completos cargados de Firestore
+    if (selectedClient) {
+      // Cliente existente (o prefill desde la ficha del cliente, vía clienteId)
       body.clienteId = selectedClient.id;
-    } else if (selectedClient && !selectedClient.contacto) {
-      // Prefill desde URL (solo id + nombre) → usar clienteId
-      body.clienteId = selectedClient.id;
+    } else if (showNewClient) {
+      setAttemptedSubmit(true);
+      const errs = validateNewClient(newClient);
+      if (Object.keys(errs).length > 0) {
+        setError('Completá los datos del cliente antes de continuar.');
+        return;
+      }
+      body.clienteNombre   = newClient.nombre.trim();
+      body.clienteContacto = newClient.contacto.trim();
+      body.clienteTelefono = newClient.telefono.trim();
+      body.clienteEmail    = newClient.email.trim();
+      body.clienteDniCuit  = newClient.dni_cuit.trim();
     } else {
-      // Nuevo cliente: leer los hidden inputs del picker
-      body.clienteNombre   = fd.get('clienteNombre');
-      body.clienteContacto = fd.get('clienteContacto');
-      body.clienteTelefono = fd.get('clienteTelefono');
-      body.clienteEmail    = fd.get('clienteEmail');
-      body.clienteDniCuit  = fd.get('clienteDniCuit');
+      setError('Seleccioná un cliente existente o creá uno nuevo.');
+      return;
     }
 
     setLoading(true);
@@ -260,7 +294,15 @@ function NewProjectForm() {
             <div className="section-head">Cliente</div>
           </div>
           <div className="px-4 py-4">
-            <ClientPicker selected={selectedClient} onSelect={setSelectedClient} />
+            <ClientPicker
+              selected={selectedClient}
+              onSelect={setSelectedClient}
+              showNew={showNewClient}
+              onShowNewChange={setShowNewClient}
+              newForm={newClient}
+              onNewFormChange={setNewClient}
+              newFormErrors={newClientErrors}
+            />
           </div>
         </div>
 
@@ -270,7 +312,7 @@ function NewProjectForm() {
             <div className="section-head">Domicilio de obra</div>
           </div>
           <div className="px-4 py-4 space-y-3">
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="col-span-2">
                 <label className={labelCls}>Calle *</label>
                 {input(form.calle, (v) => set('calle', v), { required: true })}
@@ -280,7 +322,7 @@ function NewProjectForm() {
                 {input(form.numero, (v) => set('numero', v), { required: true })}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={labelCls}>Localidad *</label>
                 {input(form.localidad, (v) => set('localidad', v), { required: true, placeholder: 'City Bell, Gonnet…' })}
@@ -290,7 +332,7 @@ function NewProjectForm() {
                 {input(form.referencia, (v) => set('referencia', v), { placeholder: 'Piso, depto, lote…' })}
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={labelCls}>Tipo de espacio *</label>
                 {sel(form.tipoEspacio, (v) => set('tipoEspacio', v), <>
@@ -317,7 +359,7 @@ function NewProjectForm() {
             <div className="section-head">Material a instalar</div>
           </div>
           <div className="px-4 py-4 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className={labelCls}>Tipo *</label>
                 {sel(form.materialTipo, (v) => set('materialTipo', v), <>

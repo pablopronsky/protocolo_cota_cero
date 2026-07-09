@@ -143,6 +143,34 @@ export async function setDocStatus(
   await batch.commit();
 }
 
+// #19 — Reabre un doc bloqueado (completo/firmado → en_progreso). Solo admin:
+// las reglas Firestore restringen esta transición a los campos que toca este
+// batch (ver firestore.rules, bloque de reopen bajo isAdmin()).
+export async function reopenDoc(
+  projectCode: ProjectCode,
+  docType: DocType,
+  by: string,
+): Promise<void> {
+  const batch = writeBatch(db());
+  const docRef = doc(db(), 'projects', projectCode, 'documents', docType);
+  const projRef = doc(db(), 'projects', projectCode);
+  const now = Date.now();
+
+  batch.update(docRef, {
+    status: 'en_progreso' as DocStatus,
+    updatedAt: now,
+    updatedBy: by,
+    reopenedAt: now,
+    reopenedBy: by,
+  });
+  batch.update(projRef, {
+    [`docStatus.${docType}`]: 'en_progreso' as DocStatus,
+    updatedAt: now,
+    updatedBy: by,
+  });
+  await batch.commit();
+}
+
 export async function archiveProject(projectCode: ProjectCode): Promise<void> {
   await updateDoc(doc(db(), 'projects', projectCode), {
     status: 'archivado' as ProjectStatus,

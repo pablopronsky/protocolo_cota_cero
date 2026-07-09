@@ -69,6 +69,7 @@ export default function ProjectOverviewPage({
   const router = useRouter();
   const { confirmOpen, confirmMessage, confirmDanger, openConfirm, onConfirm, onCancel } = useConfirm();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [duplicating, setDuplicating] = useState(false);
 
   if (loading) {
     return (
@@ -97,23 +98,31 @@ export default function ProjectOverviewPage({
   }
 
   async function handleDuplicate() {
-    if (!project || !user) return;
+    // El guard de `duplicating` evita que un doble tap dispare dos duplicados.
+    if (!project || !user || duplicating) return;
     setActionError(null);
-    const token = await user.getIdToken();
-    const res = await fetch('/api/projects/duplicate', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ originCode: project.code }),
-    });
-    if (res.ok) {
-      const { code: newCode } = await res.json();
-      router.push(`/projects/${newCode}`);
-    } else {
-      const data = await res.json().catch(() => ({}));
-      setActionError(data.error ?? 'No se pudo duplicar el proyecto.');
+    setDuplicating(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/projects/duplicate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ originCode: project.code }),
+      });
+      if (res.ok) {
+        const { code: newCode } = await res.json();
+        router.push(`/projects/${newCode}`);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setActionError(data.error ?? 'No se pudo duplicar el proyecto.');
+      }
+    } catch {
+      setActionError('No se pudo duplicar el proyecto.');
+    } finally {
+      setDuplicating(false);
     }
   }
 
@@ -185,7 +194,10 @@ export default function ProjectOverviewPage({
             const upstreamEmpty =
               i > 0 && (project.docStatus?.[DOC_ORDER[i - 1]] ?? 'vacio') === 'vacio';
 
-            const isBlocked = isArchived || (upstreamEmpty && status === 'vacio');
+            // Los borradores se editan en cualquier orden (el contrato del
+            // protocolo solo gatea el CIERRE, ver sequencing.ts). El hint
+            // "Completar X primero" queda como guía, sin bloquear el acceso.
+            const isBlocked = isArchived;
 
             return (
               <Link
@@ -285,9 +297,10 @@ export default function ProjectOverviewPage({
         <div className="flex gap-2 pt-1">
           <button
             onClick={handleDuplicate}
-            className="flex-1 text-[11px] font-bold uppercase tracking-[0.2em] border border-[rgba(43,45,47,0.15)] rounded-md py-3 text-[#2B2D2F]/70 hover:border-[#C38A5A]/35 hover:text-[#C38A5A] transition-colors cursor-pointer"
+            disabled={duplicating}
+            className="flex-1 text-[11px] font-bold uppercase tracking-[0.2em] border border-[rgba(43,45,47,0.15)] rounded-md py-3 text-[#2B2D2F]/70 hover:border-[#C38A5A]/35 hover:text-[#C38A5A] transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default"
           >
-            Duplicar plantilla
+            {duplicating ? 'Duplicando…' : 'Duplicar plantilla'}
           </button>
           <button
             onClick={handleArchive}

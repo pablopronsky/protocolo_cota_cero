@@ -2,14 +2,40 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { subscribeDoc, saveDoc, setDocStatus } from '@/lib/repo/projects';
+import { useSaveStatusContext } from '@/contexts/SaveStatusContext';
 import type { ProjectCode, DocType, DocStatus, ProjectStatus, AnyDoc } from '@/schemas';
+
+// Cerrar/firmar usa writeBatch.commit(), cuya promesa no resuelve hasta el ack
+// del servidor: sin conexión el spinner quedaría colgado para siempre. Los
+// forms chequean esto antes de intentar el lock y muestran el mensaje.
+export function offlineLockError(): string | null {
+  if (typeof navigator !== 'undefined' && !navigator.onLine) {
+    return 'Sin conexión: no se puede cerrar el documento sin señal. Los cambios quedan guardados en el dispositivo; reintentá al recuperar conexión.';
+  }
+  return null;
+}
 
 export function useDoc(projectCode: ProjectCode, docType: DocType) {
   const [docData, setDocData] = useState<AnyDoc | null>(null);
   const [loading, setLoading] = useState(true);
-  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'offline' | 'denied' | 'error'>('idle');
+  const [saveState, setSaveStateLocal] = useState<'idle' | 'saving' | 'saved' | 'offline' | 'denied' | 'error'>('idle');
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Último payload programado y aún no escrito. Permite despacharlo si el
+  // componente se desmonta durante la ventana del debounce (navegación in-app).
+  const pendingRef = useRef<{ data: Partial<AnyDoc>; projectStatus?: ProjectStatus } | null>(null);
+  const globalSave = useSaveStatusContext();
+  const setSaveState = useCallback(
+    (s: 'idle' | 'saving' | 'saved' | 'offline' | 'denied' | 'error') => {
+      setSaveStateLocal(s);
+      globalSave?.setDocState(s);
+    },
+    [globalSave],
+  );
+
+  // Al desmontar (salir del doc), limpia el estado global para que el header
+  // no muestre "Guardado" en páginas que no son de edición de documentos.
+  useEffect(() => () => globalSave?.setDocState('idle'), [globalSave]);
   // Estado en vivo del doc, para decidir en el momento del guardado si esta es
   // la primera edición (vacio → en_progreso). Vive en un ref para que el
   // callback debounced lea siempre el valor actual sin recrearse.
@@ -31,7 +57,9 @@ export function useDoc(projectCode: ProjectCode, docType: DocType) {
     (data: Partial<AnyDoc>, projectStatus?: ProjectStatus) => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
       setSaveState('saving');
+      pendingRef.current = { data, projectStatus };
       debounceRef.current = setTimeout(async () => {
+        pendingRef.current = null;
         try {
           // Primera edición de un doc vacío: promoverlo a en_progreso. A
           // diferencia de saveDoc (que solo toca el doc), setDocStatus también
@@ -68,12 +96,24 @@ export function useDoc(projectCode: ProjectCode, docType: DocType) {
       clearTimeout(debounceRef.current);
       debounceRef.current = null;
     }
+    pendingRef.current = null;
   }, []);
 
+  // Al desmontar, un guardado pendiente no se descarta: se despacha inmediato.
+  // Sin esto, editar y navegar dentro de la app antes de que venza el debounce
+  // (800ms) perdía la última edición en silencio.
   useEffect(() => () => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (savedTimerRef.current) clearTimeout(savedTimerRef.current);
-  }, []);
+    const pending = pendingRef.current;
+    if (pending) {
+      pendingRef.current = null;
+      const write = statusRef.current === 'vacio'
+        ? setDocStatus(projectCode, docType, 'en_progreso', pending.data, pending.projectStatus)
+        : saveDoc(projectCode, docType, pending.data);
+      void write.catch(() => {});
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { docData, loading, saveState, autosave, cancelAutosave };
 }
