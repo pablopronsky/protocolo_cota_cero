@@ -1,6 +1,7 @@
 import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { getAuth, Auth } from 'firebase-admin/auth';
+import { getStorage } from 'firebase-admin/storage';
 
 let adminApp: App;
 let adminDb: Firestore;
@@ -35,4 +36,10 @@ export function getAdminDb(): Firestore {
 export function getAdminAuth(): Auth {
   if (!adminAuth) adminAuth = getAuth(getAdminApp());
   return adminAuth;
+}
+
+// Mismo bucket que usa el cliente (la env NEXT_PUBLIC_* también está disponible
+// en el server). Lo usa /api/sign para subir la firma remota del cliente.
+export function getAdminBucket() {
+  return getStorage(getAdminApp()).bucket(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET);
 }

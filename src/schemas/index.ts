@@ -187,6 +187,23 @@ export interface DocAC extends DocBase {
   observacionesCliente: string;
   firmaCliente: { nombreAclaratorio: string; dni: string; firma: PhotoRef | null };
   firmaCotaCero: { uid: UID; firma: PhotoRef | null };
+  // Mirror de la solicitud de firma remota activa (si hay). Lo mantiene el
+  // server (/api/sign): el form la muestra sin lecturas extra y desaparece al
+  // firmarse o cancelarse.
+  remoteSign?: { token: string; createdAt: Millis; expiresAt: Millis } | null;
+}
+
+// ── Firma remota del acta ─────────────────────────────────
+// Solicitud de firma por link público (el cliente no tiene cuenta). Vive en
+// signRequests/{token}; solo el Admin SDK la lee/escribe (reglas: deny all).
+export interface SignRequest {
+  token: string;
+  projectCode: ProjectCode;
+  status: 'pending' | 'completed' | 'cancelled';
+  createdAt: Millis;
+  createdBy: UID;
+  expiresAt: Millis;
+  signedAt?: Millis;
 }
 
 // ── FM ────────────────────────────────────────────────────

@@ -8,6 +8,16 @@ service cloud.firestore {
     function isTecnico() { return role() == 'tecnico'; }
     function locked(d)   { return d.status == 'completo' || d.status == 'firmado'; }
 
+    // #19 — El admin puede reabrir un doc bloqueado, pero SOLO como transición
+    // exacta a en_progreso tocando nada más que estos campos (no reedita
+    // contenido bloqueado en el mismo write).
+    function isReopen(before, after) {
+      return locked(before)
+          && after.status == 'en_progreso'
+          && after.diff(before).affectedKeys()
+               .hasOnly(['status','updatedAt','updatedBy','reopenedAt','reopenedBy']);
+    }
+
     // #7 — Valida que todos los valores del mapa docStatus estén en el enum.
     // Los 6 docTypes siempre existen (initEmptyDocs los inicializa al crear el proyecto).
     function validDocStatusMap(ds) {
@@ -51,6 +61,14 @@ service cloud.firestore {
       return get(/databases/$(db)/documents/projects/$(code)/documents/RF)
                .data.aptoEntrega == true;
     }
+    // Un proyecto archivado es de solo lectura: ninguna escritura en sus
+    // documentos (para editar hay que desarchivarlo primero). Cuesta 1 lectura
+    // por escritura de documento; aceptable para uso interno.
+    function projectArchived(code) {
+      return get(/databases/$(db)/documents/projects/$(code))
+               .data.status == 'archivado';
+    }
+
     // #21 — Un documento solo se cierra (completo/firmado) si el anterior del
     // protocolo ya está cerrado; el acta (AC) además exige RF apto para entrega.
     // Solo cuesta lecturas extra al cerrar, no en cada autosave.
@@ -81,6 +99,13 @@ service cloud.firestore {
     match /config/{document} {
       allow read:  if signedIn();   // los forms lo leen para sembrar
       allow write: if isAdmin();    // solo admin edita el protocolo
+    }
+
+    match /signRequests/{token} {
+      // Solicitudes de firma remota del acta: solo el Admin SDK (/api/sign)
+      // las lee y escribe. Ningún cliente —ni admin— accede directo: el token
+      // es la credencial del link público y no debe poder enumerarse.
+      allow read, write: if false;
     }
 
     match /projects/{code} {
@@ -115,8 +140,11 @@ service cloud.firestore {
         // Técnico: solo VT, EP, OT, RF.
         // (#5 reglas) AC y FM son exclusivos del admin, coherente con el
         //             guard de UI en ACForm (Batch 3).
-        allow write: if (isAdmin()
-                          && (resource == null || !locked(resource.data))
+        allow write: if !projectArchived(code)
+                     && ((isAdmin()
+                          && (resource == null
+                              || !locked(resource.data)
+                              || isReopen(resource.data, request.resource.data))
                           // #21 — no puede cerrar fuera de secuencia (delete: request.resource == null).
                           && (request.resource == null
                               || secuenciaOk(code, docType, request.resource.data.status)))
@@ -127,7 +155,7 @@ service cloud.firestore {
                           && request.resource.data.status
                                in ['vacio','en_progreso','completo','firmado']
                           // #21 — no puede cerrar fuera de secuencia.
-                          && secuenciaOk(code, docType, request.resource.data.status));
+                          && secuenciaOk(code, docType, request.resource.data.status)));
       }
 
       match /revisions/{rev} {

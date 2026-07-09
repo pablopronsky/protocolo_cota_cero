@@ -2,16 +2,20 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
-import SaveIndicator from '@/components/SaveIndicator';
-import { useDoc } from '@/hooks/useDoc';
-import { setDocStatus, saveDoc, writeRevision } from '@/lib/repo/projects';
+import { useDoc, offlineLockError } from '@/hooks/useDoc';
+import { setDocStatus, saveDoc, writeRevision, reopenDoc } from '@/lib/repo/projects';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
-import { enqueueSignature, cancelQueuedSignature } from '@/lib/photos';
+import { enqueueSignature, cancelQueuedSignature, getPhotoUrl } from '@/lib/photos';
 import { sequencingError } from '@/lib/sequencing';
 import SignaturePad from '@/components/SignaturePad';
+import { Section } from '@/components/docs/Section';
+import { SectionNav } from '@/components/docs/SectionNav';
+import { DocActionBar } from '@/components/docs/DocActionBar';
+import { Button } from '@/components/ui/Button';
 import { useAuth } from '@/hooks/useAuth';
 import { useConfirm } from '@/hooks/useConfirm';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { useToast } from '@/contexts/ToastContext';
 import type { Project, DocAC, AnyDoc, DocType } from '@/schemas';
 
 interface Props {
@@ -23,13 +27,16 @@ interface Props {
 
 export default function ACForm({ projectCode, project, upstream, docData }: Props) {
   const { user, role } = useAuth();
-  const { docData: liveDoc, saveState, autosave, cancelAutosave } = useDoc(projectCode, 'AC');
+  const { showToast } = useToast();
+  const { docData: liveDoc, autosave, cancelAutosave } = useDoc(projectCode, 'AC');
   const seedDoc = docData as DocAC | null;
   const ac = (liveDoc as DocAC | null) ?? seedDoc;
   const isSigned = ac?.status === 'firmado';
+  const isArchived = project.status === 'archivado';
   // Técnicos ven el form en solo lectura: las reglas Firestore no permiten escritura AC a no-admin.
-  const isLocked = isSigned || role !== 'admin';
+  const isLocked = isSigned || role !== 'admin' || isArchived;
   const [locking, setLocking] = useState(false);
+  const [reopening, setReopening] = useState(false);
   const [lockErrors, setLockErrors] = useState<string[]>([]);
   const [signError, setSignError] = useState<string | null>(null);
   // #22 — Una vez que el cliente firma, el contenido del acta queda congelado:
@@ -45,6 +52,10 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
   // Blobs locales para preview de firmas; no se persisten en RHF ni Firestore.
   const [firmaClienteBlob, setFirmaClienteBlob] = useState<string | null>(null);
   const [firmaCotaCeroBlob, setFirmaCotaCeroBlob] = useState<string | null>(null);
+  // URLs de Storage para firmas ya subidas: sin esto, tras recargar la página
+  // la preview quedaba como caja vacía (el blob local solo vive en la sesión).
+  const [firmaClienteUrl, setFirmaClienteUrl] = useState<string | null>(null);
+  const [firmaCotaCeroUrl, setFirmaCotaCeroUrl] = useState<string | null>(null);
 
   const seed = deriveInherited(project, upstream, 'AC');
   const ro = seed.readonly as Record<string, unknown>;
@@ -60,11 +71,45 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
   // Seed de campos: una sola vez, desde el snapshot estable de la página.
   useEffect(() => { if (seedDoc) reset(seedDoc); }, [seedDoc?.updatedAt]); // eslint-disable-line
 
-  // Autosave: excluir firmaCliente/firmaCotaCero — lib/photos.ts es el único escritor.
-  // Gatear en type==='change' para evitar autosave fantasma al hacer reset() (#6).
+  const firmaClienteStored = liveAC?.firmaCliente?.firma ?? (seedDoc?.firmaCliente?.firma ?? null);
+  const firmaCotaCeroStored = liveAC?.firmaCotaCero?.firma ?? (seedDoc?.firmaCotaCero?.firma ?? null);
+
   useEffect(() => {
-    const sub = watch((values, { type }) => {
-      if (type !== 'change') return;
+    if (firmaClienteStored && !firmaClienteStored.pending && !firmaClienteBlob) {
+      getPhotoUrl(firmaClienteStored.storagePath).then(setFirmaClienteUrl).catch(() => {});
+    } else if (!firmaClienteStored) {
+      setFirmaClienteUrl(null);
+    }
+  }, [firmaClienteStored?.id, firmaClienteStored?.pending, firmaClienteBlob]); // eslint-disable-line
+
+  useEffect(() => {
+    if (firmaCotaCeroStored && !firmaCotaCeroStored.pending && !firmaCotaCeroBlob) {
+      getPhotoUrl(firmaCotaCeroStored.storagePath).then(setFirmaCotaCeroUrl).catch(() => {});
+    } else if (!firmaCotaCeroStored) {
+      setFirmaCotaCeroUrl(null);
+    }
+  }, [firmaCotaCeroStored?.id, firmaCotaCeroStored?.pending, firmaCotaCeroBlob]); // eslint-disable-line
+
+  // Firma remota: si la firma del cliente llega por el link mientras el acta
+  // está abierta, el contenido firmado (conformidad, datos, observaciones) lo
+  // escribió el server. Sincroniza el form y fija el snapshot congelado para
+  // que handleSign firme exactamente lo que el cliente vio.
+  useEffect(() => {
+    if (!clienteYaFirmo || isSigned) return;
+    if (frozenValuesRef.current) return; // flujo presencial: ya congelado en esta sesión
+    if (liveAC) {
+      reset(liveAC);
+      frozenValuesRef.current = liveAC;
+      setFrozen(true);
+    }
+  }, [clienteYaFirmo, isSigned, liveAC?.updatedAt]); // eslint-disable-line
+
+  // Autosave: excluir firmaCliente/firmaCotaCero — lib/photos.ts es el único escritor.
+  // Gatear en `name` — reset() (seed, #6) emite sin name; las ediciones del
+  // usuario (inputs nativos y setValue) siempre lo traen.
+  useEffect(() => {
+    const sub = watch((values, { name }) => {
+      if (!name) return;
       if (contentLocked) return;
       const { firmaCliente, firmaCotaCero: _fc, ...rest } = values;
       autosave({
@@ -125,6 +170,63 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
     }
   }
 
+  // ── Firma remota ────────────────────────────────────────
+  // El server mantiene remoteSign en el doc AC: acá solo se dispara la API y
+  // la suscripción en vivo refleja el estado (link activo / vencido / firmado).
+  const remoteSign = liveAC?.remoteSign ?? seedDoc?.remoteSign ?? null;
+  const remoteActive = !!remoteSign && remoteSign.expiresAt > Date.now();
+  const remoteExpired = !!remoteSign && remoteSign.expiresAt <= Date.now();
+  const [remoteBusy, setRemoteBusy] = useState(false);
+  const signUrl = remoteSign && typeof window !== 'undefined'
+    ? `${window.location.origin}/firmar/${remoteSign.token}`
+    : null;
+  const whatsappHref = signUrl
+    ? `https://wa.me/?text=${encodeURIComponent(
+        `Hola ${project.clienteNombre}! Te enviamos el acta de conformidad de tu obra para que la firmes desde el celular (te lleva 2 minutos): ${signUrl} — COTA CERO`,
+      )}`
+    : undefined;
+
+  async function remoteRequest(method: 'POST' | 'DELETE', okMsg: string, failMsg: string) {
+    if (!user || remoteBusy) return;
+    setRemoteBusy(true);
+    try {
+      const token = await user.getIdToken();
+      const res = await fetch('/api/sign/request', {
+        method,
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ projectCode }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error((data as { error?: string }).error ?? failMsg);
+      }
+      showToast(okMsg, 'success');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : failMsg, 'error');
+    } finally {
+      setRemoteBusy(false);
+    }
+  }
+
+  function handleCreateRemote() {
+    void remoteRequest('POST', 'Link de firma generado', 'No se pudo generar el link');
+  }
+
+  async function handleCancelRemote() {
+    if (!await openConfirm('¿Cancelar el link de firma? El cliente ya no va a poder usarlo.', { danger: true })) return;
+    void remoteRequest('DELETE', 'Link cancelado', 'No se pudo cancelar el link');
+  }
+
+  async function handleCopyLink() {
+    if (!signUrl) return;
+    try {
+      await navigator.clipboard.writeText(signUrl);
+      showToast('Link copiado', 'success');
+    } catch {
+      showToast('No se pudo copiar el link', 'error');
+    }
+  }
+
   // #22 — Descarta la firma del cliente y reabre la edición del acta. Cancela la
   // firma encolada para que un flush posterior no la resucite.
   async function handleDiscardFirma() {
@@ -151,6 +253,8 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
   }
 
   async function handleSign() {
+    const offline = offlineLockError();
+    if (offline) { setLockErrors([offline]); return; }
     // #22 — Firmar sobre el contenido congelado en la firma del cliente (no un
     // getValues() fresco que pudiera haber drifteado). Si no hay congelado en
     // esta sesión, el contenido del form ya está bloqueado y coincide con el doc.
@@ -193,6 +297,21 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
     } finally { setLocking(false); }
   }
 
+  // #19 — Admin puede reabrir un acta ya firmada (deja auditoría en revisions).
+  async function handleReopen() {
+    if (!await openConfirm('¿Reabrir el acta firmada? Volverá a "en progreso" y quedará editable.', { danger: true })) return;
+    setReopening(true);
+    try {
+      await reopenDoc(projectCode, 'AC', user?.uid ?? '');
+      await writeRevision(projectCode, 'AC', 'en_progreso', (ac ?? {}) as Record<string, unknown>, (ac?.version ?? 0) + 1, user?.uid ?? '');
+      showToast('Acta reabierta', 'success');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'No se pudo reabrir el acta.', 'error');
+    } finally {
+      setReopening(false);
+    }
+  }
+
   const inputCls = `w-full border rounded-md px-3 py-2.5 text-[14px] focus:border-[#C38A5A] focus:outline-none transition-colors ${contentLocked ? 'opacity-60 pointer-events-none bg-[#F0EDE7] border-[rgba(43,45,47,0.12)] text-[#6B6155]' : 'bg-white border-[rgba(43,45,47,0.18)] text-[#2B2D2F]'}`;
   const labelCls = 'block text-[13px] font-semibold text-[#6B6155] mb-1.5';
 
@@ -202,14 +321,14 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
   return (
     <>
     <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-      <div className="flex items-center justify-between">
-        <span className="text-xs font-mono text-[#6B6155] capitalize">{ac?.status ?? 'vacio'}</span>
-        <SaveIndicator state={saveState} />
-      </div>
-
       {isSigned && (
-        <div className="bg-[#2B2D2F] text-[#F5F2ED] rounded-lg px-4 py-3 text-[15px] font-bold uppercase tracking-[0.14em]">
-          Acta firmada · Documento definitivo
+        <div className="bg-[#2B2D2F] text-[#F5F2ED] rounded-lg px-4 py-3 text-[15px] font-bold uppercase tracking-[0.14em] flex items-center justify-between gap-3 flex-wrap">
+          <span>Acta firmada · Documento definitivo</span>
+          {role === 'admin' && (
+            <Button variant="danger" size="sm" onClick={handleReopen} disabled={reopening}>
+              {reopening ? 'Reabriendo…' : 'Reabrir'}
+            </Button>
+          )}
         </div>
       )}
 
@@ -217,6 +336,14 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
         <div className="bg-[#2B2D2F] text-[#F5F2ED] rounded-lg px-4 py-3 text-sm">
           Solo lectura · El acta de conformidad es completada por el administrador
         </div>
+      )}
+
+      {role === 'admin' && (
+        <SectionNav sections={[
+          { id: 'ac-fecha', label: 'Fecha y conformidad', done: !!ac?.fechaActa && !!ac?.conformidad },
+          { id: 'ac-firma-cliente', label: 'Firma cliente', done: !!ac?.firmaCliente?.firma },
+          { id: 'ac-firma-cc', label: 'Firma COTA CERO', done: !!ac?.firmaCotaCero?.firma },
+        ]} />
       )}
 
       {/* #22 — Acta congelada por la firma del cliente, a la espera de la firma final */}
@@ -242,7 +369,7 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
       </div>
 
       {/* Fecha y conformidad */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
+      <Section id="ac-fecha" title="Fecha y conformidad">
         <div>
           <label htmlFor="fechaActa" className={labelCls}>Fecha del acta</label>
           <input id="fechaActa" type="date" {...register('fechaActa')} className={inputCls} disabled={contentLocked} />
@@ -260,12 +387,11 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
           <label htmlFor="observacionesCliente" className={labelCls}>Observaciones del cliente</label>
           <textarea id="observacionesCliente" rows={3} {...register('observacionesCliente')} className={inputCls} disabled={contentLocked} />
         </div>
-      </div>
+      </Section>
 
       {/* Firma cliente */}
-      <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-        <p className="section-head">Firma del cliente</p>
-        <div className="grid grid-cols-2 gap-3">
+      <Section id="ac-firma-cliente" title="Firma del cliente">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label htmlFor="firmaClienteNombre" className={labelCls}>Nombre aclaratorio</label>
             <input id="firmaClienteNombre" {...register('firmaCliente.nombreAclaratorio')} className={inputCls} disabled={contentLocked} />
@@ -276,52 +402,112 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
           </div>
         </div>
         {!contentLocked && (
+          <div className="border border-[#C38A5A]/30 bg-[#C38A5A]/[0.06] rounded-lg px-4 py-3 space-y-2.5">
+            <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#C38A5A]">Firma remota</p>
+            {remoteActive ? (
+              <>
+                <p className="text-[13px]">
+                  Link activo · vence el {new Date(remoteSign!.expiresAt).toLocaleDateString('es-AR')}.
+                  Cuando el cliente firme, el acta se actualiza sola.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    onClick={handleCopyLink}
+                    className="text-[11px] font-bold uppercase tracking-[0.16em] border border-[rgba(43,45,47,0.15)] rounded px-3 py-2 text-[#2B2D2F]/70 hover:border-[#C38A5A]/40 hover:text-[#C38A5A] transition-colors"
+                  >
+                    Copiar link
+                  </button>
+                  <a
+                    href={whatsappHref}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-[11px] font-bold uppercase tracking-[0.16em] rounded px-3 py-2 text-white transition-colors"
+                    style={{ background: '#C38A5A' }}
+                  >
+                    Enviar por WhatsApp
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleCancelRemote}
+                    disabled={remoteBusy}
+                    className="text-[11px] font-bold uppercase tracking-[0.16em] text-red-500 hover:text-red-600 px-1 py-2 transition-colors disabled:opacity-50"
+                  >
+                    Cancelar link
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p className="text-[13px] text-[#6B6155]">
+                  {remoteExpired
+                    ? 'El link anterior venció. Generá uno nuevo y reenviáselo al cliente.'
+                    : 'El cliente firma desde su celular, sin visita: generá un link y envíaselo por WhatsApp.'}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleCreateRemote}
+                  disabled={remoteBusy}
+                  className="text-[11px] font-bold uppercase tracking-[0.16em] rounded px-3 py-2 text-white transition-colors disabled:opacity-50"
+                  style={{ background: '#C38A5A' }}
+                >
+                  {remoteBusy ? 'Generando…' : 'Generar link de firma'}
+                </button>
+              </>
+            )}
+          </div>
+        )}
+
+        {!contentLocked && (
           <SignaturePad onSave={handleFirmaCliente} saved={!!watch('firmaCliente.firma')} />
         )}
         {(watch('firmaCliente.firma') || firmaClienteBlob) && (
           <div className="w-48 h-24 rounded border border-[#B8AEA3]/40 overflow-hidden bg-[#B8AEA3]/10">
-            {firmaClienteBlob && (
+            {(firmaClienteBlob || firmaClienteUrl) ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={firmaClienteBlob} alt="Firma cliente" className="w-full h-full object-contain" />
+              <img src={firmaClienteBlob ?? firmaClienteUrl ?? undefined} alt="Firma cliente" className="w-full h-full object-contain" />
+            ) : (
+              <span className="flex items-center justify-center h-full text-[11px] text-[#6B6155]">Firma pendiente de subida</span>
             )}
           </div>
         )}
-      </div>
+      </Section>
 
       {/* Firma COTA CERO */}
       {role === 'admin' && (
-        <div className="doc-section bg-white border border-[rgba(43,45,47,0.10)] rounded-lg px-4 py-3 space-y-3">
-          <p className="section-head">Firma COTA CERO</p>
+        <Section id="ac-firma-cc" title="Firma COTA CERO">
           {!isSigned && (
             <SignaturePad onSave={handleFirmaCotaCero} saved={!!watch('firmaCotaCero.firma')} />
           )}
           {(watch('firmaCotaCero.firma') || firmaCotaCeroBlob) && (
             <div className="w-48 h-24 rounded border border-[#B8AEA3]/40 overflow-hidden bg-[#B8AEA3]/10">
-              {firmaCotaCeroBlob && (
+              {(firmaCotaCeroBlob || firmaCotaCeroUrl) ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={firmaCotaCeroBlob} alt="Firma COTA CERO" className="w-full h-full object-contain" />
+                <img src={firmaCotaCeroBlob ?? firmaCotaCeroUrl ?? undefined} alt="Firma COTA CERO" className="w-full h-full object-contain" />
+              ) : (
+                <span className="flex items-center justify-center h-full text-[11px] text-[#6B6155]">Firma pendiente de subida</span>
               )}
             </div>
           )}
-        </div>
-      )}
-
-      {lockErrors.length > 0 && (
-        <div className="border border-red-300/50 bg-red-50 rounded-lg px-4 py-3 space-y-1">
-          <p className="text-[13px] font-bold uppercase tracking-[0.14em] text-red-500">Completar antes de firmar</p>
-          {lockErrors.map((e, i) => <p key={i} className="text-[13px] text-red-500">· {e}</p>)}
-        </div>
-      )}
-
-      {signError && (
-        <div className="border border-red-300/50 bg-red-50 rounded-lg px-4 py-3 text-[13px] text-red-500">{signError}</div>
+        </Section>
       )}
 
       {!isSigned && role === 'admin' && (
-        <button type="button" onClick={handleSign} disabled={locking}
-          className="w-full text-white font-bold text-[11px] uppercase tracking-[0.24em] rounded-md py-3.5 disabled:opacity-50 no-print transition-colors" style={{ background: '#C38A5A' }}>
-          {locking ? 'Firmando…' : 'Firmar acta de conformidad'}
-        </button>
+        <DocActionBar>
+          {lockErrors.length > 0 && (
+            <div className="space-y-1">
+              <p className="text-[12px] font-bold uppercase tracking-[0.14em] text-red-500">Completar antes de firmar</p>
+              {lockErrors.map((e, i) => <p key={i} className="text-[12px] text-red-500">· {e}</p>)}
+            </div>
+          )}
+          {signError && (
+            <p className="text-[12px] text-red-500">{signError}</p>
+          )}
+          <button type="button" onClick={handleSign} disabled={locking}
+            className="w-full text-white font-bold text-[11px] uppercase tracking-[0.24em] rounded-md py-3.5 disabled:opacity-50 transition-colors" style={{ background: '#C38A5A' }}>
+            {locking ? 'Firmando…' : 'Firmar acta de conformidad'}
+          </button>
+        </DocActionBar>
       )}
     </form>
       <ConfirmDialog open={confirmOpen} message={confirmMessage} danger={confirmDanger} onConfirm={onConfirm} onCancel={onCancel} />

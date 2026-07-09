@@ -59,6 +59,31 @@ export const DuplicateProjectInput = z.object({
 
 export type DuplicateProjectInput = z.infer<typeof DuplicateProjectInput>;
 
+// ── Firma remota del acta ─────────────────────────────────
+
+export const CreateSignRequestInput = z.object({
+  projectCode: z.string().regex(/^COTA-\d{4}-\d{4}$/, 'Código de proyecto inválido'),
+});
+
+export type CreateSignRequestInput = z.infer<typeof CreateSignRequestInput>;
+
+// El token es base64url de 24 bytes (32 chars); la regex evita path traversal
+// en db.doc() con tokens llegados por URL.
+export const SIGN_TOKEN_RE = /^[A-Za-z0-9_-]{20,64}$/;
+
+export const SubmitSignatureInput = z.object({
+  nombreAclaratorio: z.string().trim().min(1, 'Nombre y apellido requeridos').max(120),
+  dni: z.string().trim().min(6, 'DNI inválido').max(20),
+  conformidad: z.enum(['conforme', 'conforme_con_observaciones', 'no_conforme']),
+  observacionesCliente: z.string().trim().max(2000).default(''),
+  // JPEG del lienzo de firma como data URL (canvas 640×220 ≈ 20-60KB).
+  firmaDataUrl: z.string()
+    .startsWith('data:image/jpeg;base64,', 'Formato de firma inválido')
+    .max(1_000_000, 'Firma demasiado pesada'),
+});
+
+export type SubmitSignatureInput = z.infer<typeof SubmitSignatureInput>;
+
 // ── Protocolo: validación al guardar ─────────────────────
 // Cada array de checkbox se valida como subconjunto del enum correspondiente.
 // Usado por el handler de guardado del editor (Batch B).

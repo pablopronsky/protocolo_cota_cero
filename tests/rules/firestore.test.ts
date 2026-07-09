@@ -345,13 +345,104 @@ describe('Document access control', () => {
     );
   });
 
-  it('nobody can write a locked document (status=firmado)', async () => {
+  it('nobody can mutate content of a locked document (status=firmado)', async () => {
     await seedProject('P-2025-001', BASE_PROJECT);
     await seedDoc('P-2025-001', 'AC', { status: 'firmado' });
     await assertFails(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'AC'),
-        { status: 'en_progreso' },
+        { observacionesCliente: 'mutado' },
+      ),
+    );
+  });
+
+  // #19 — la única salida de un doc bloqueado es la transición exacta de
+  // reopen (→ en_progreso, tocando solo los campos del batch), y solo admin.
+  it('admin can reopen a firmado doc (exact transition)', async () => {
+    await seedProject('P-2025-001', BASE_PROJECT);
+    await seedDoc('P-2025-001', 'AC', { status: 'firmado' });
+    await assertSucceeds(
+      updateDoc(
+        doc(admin(), 'projects', 'P-2025-001', 'documents', 'AC'),
+        { status: 'en_progreso', updatedAt: 2000, updatedBy: 'admin-uid', reopenedAt: 2000, reopenedBy: 'admin-uid' },
+      ),
+    );
+  });
+
+  it('técnico cannot reopen a locked doc', async () => {
+    await seedProject('P-2025-001', BASE_PROJECT);
+    await seedDoc('P-2025-001', 'VT', { status: 'completo' });
+    await assertFails(
+      updateDoc(
+        doc(tecnico(), 'projects', 'P-2025-001', 'documents', 'VT'),
+        { status: 'en_progreso', updatedAt: 2000, updatedBy: 'tec-uid', reopenedAt: 2000, reopenedBy: 'tec-uid' },
+      ),
+    );
+  });
+});
+
+// ── Sign requests (firma remota) ──────────────────────────────────
+
+describe('Sign requests are Admin-SDK only', () => {
+  it('admin cannot read a sign request', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'signRequests', 'tok-123'), {
+        projectCode: 'P-2025-001', status: 'pending',
+      });
+    });
+    await assertFails(getDoc(doc(admin(), 'signRequests', 'tok-123')));
+  });
+
+  it('admin cannot write a sign request', async () => {
+    await assertFails(
+      setDoc(doc(admin(), 'signRequests', 'tok-456'), {
+        projectCode: 'P-2025-001', status: 'pending',
+      }),
+    );
+  });
+
+  it('técnico cannot read a sign request', async () => {
+    await testEnv.withSecurityRulesDisabled(async (ctx) => {
+      await setDoc(doc(ctx.firestore(), 'signRequests', 'tok-789'), {
+        projectCode: 'P-2025-001', status: 'pending',
+      });
+    });
+    await assertFails(getDoc(doc(tecnico(), 'signRequests', 'tok-789')));
+  });
+});
+
+// ── Archived project is read-only ─────────────────────────────────
+
+describe('Archived project documents are read-only', () => {
+  it('admin cannot write a document of an archived project', async () => {
+    await seedProject('P-2025-001', { ...BASE_PROJECT, status: 'archivado' });
+    await seedDoc('P-2025-001', 'VT', { status: 'en_progreso' });
+    await assertFails(
+      updateDoc(
+        doc(admin(), 'projects', 'P-2025-001', 'documents', 'VT'),
+        { observaciones: 'edición sobre archivado' },
+      ),
+    );
+  });
+
+  it('técnico cannot write a document of an archived project', async () => {
+    await seedProject('P-2025-001', { ...BASE_PROJECT, status: 'archivado' });
+    await seedDoc('P-2025-001', 'VT', { status: 'en_progreso' });
+    await assertFails(
+      updateDoc(
+        doc(tecnico(), 'projects', 'P-2025-001', 'documents', 'VT'),
+        { status: 'en_progreso', observaciones: 'edición sobre archivado' },
+      ),
+    );
+  });
+
+  it('documents are writable again on a non-archived project', async () => {
+    await seedProject('P-2025-001', { ...BASE_PROJECT, status: 'en_curso' });
+    await seedDoc('P-2025-001', 'VT', { status: 'en_progreso' });
+    await assertSucceeds(
+      updateDoc(
+        doc(admin(), 'projects', 'P-2025-001', 'documents', 'VT'),
+        { observaciones: 'edición normal' },
       ),
     );
   });
