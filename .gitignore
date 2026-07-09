@@ -50,3 +50,6 @@ dev.log
 # Secretos locales para configurar Vercel (nunca commitear)
 PEGAR_EN_VERCEL.txt
 scripts/tmp-*
+
+.vercel
+.env*
