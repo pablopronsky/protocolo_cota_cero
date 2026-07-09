@@ -16,14 +16,14 @@ export interface NewClientForm {
   dni_cuit: string;
 }
 
-export const EMPTY_NEW_CLIENT: NewClientForm = { nombre: '', contacto: '', telefono: '', email: '', dni_cuit: '' };
+const EMPTY_NEW_CLIENT: NewClientForm = { nombre: '', contacto: '', telefono: '', email: '', dni_cuit: '' };
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // #22 — Validación real del sub-form de cliente nuevo (reemplaza el hidden-input
 // hack: antes se duplicaban los valores en inputs ocultos solo para que
 // `FormData` los capturara; ahora el estado vive en el padre y se valida acá).
-export function validateNewClient(f: NewClientForm): Partial<Record<keyof NewClientForm, string>> {
+function validateNewClient(f: NewClientForm): Partial<Record<keyof NewClientForm, string>> {
   const errs: Partial<Record<keyof NewClientForm, string>> = {};
   if (!f.nombre.trim()) errs.nombre = 'Nombre requerido';
   if (!f.contacto.trim()) errs.contacto = 'Contacto requerido';
