@@ -7,13 +7,26 @@ let adminApp: App;
 let adminDb: Firestore;
 let adminAuth: Auth;
 
+// La clave llega en formatos distintos según dónde se configure: el loader de
+// .env.local de Next quita las comillas envolventes, pero el dashboard de
+// Vercel guarda el valor pegado tal cual (comillas y \n escapados incluidos).
+// Sin esto, el PEM no parsea en prod: ERR_OSSL_UNSUPPORTED en cert().
+function normalizePrivateKey(raw: string | undefined): string | undefined {
+  if (!raw) return undefined;
+  let key = raw.trim();
+  if ((key.startsWith('"') && key.endsWith('"')) || (key.startsWith("'") && key.endsWith("'"))) {
+    key = key.slice(1, -1);
+  }
+  return key.replace(/\\n/g, '\n');
+}
+
 function getAdminApp(): App {
   if (getApps().length === 0) {
     adminApp = initializeApp({
       credential: cert({
         projectId:   process.env.FIREBASE_ADMIN_PROJECT_ID,
         clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
-        privateKey:  process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, '\n'),
+        privateKey:  normalizePrivateKey(process.env.FIREBASE_ADMIN_PRIVATE_KEY),
       }),
     });
   } else {
