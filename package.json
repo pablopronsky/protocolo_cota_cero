@@ -28,6 +28,11 @@
     "react-hook-form": "^7.80.0",
     "zod": "^4.4.3"
   },
+  "overrides": {
+    "jwks-rsa": {
+      "jose": "^4.15.9"
+    }
+  },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",
     "@firebase/rules-unit-testing": "^3.0.4",
