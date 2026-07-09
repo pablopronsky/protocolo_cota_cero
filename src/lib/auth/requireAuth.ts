@@ -26,7 +26,10 @@ export async function requireUser(req: NextRequest): Promise<AuthUser> {
   try {
     const decoded = await getAdminAuth().verifyIdToken(token);
     return { uid: decoded.uid, role: decoded.role as AuthUser['role'] };
-  } catch {
+  } catch (err) {
+    // El motivo real (aud mismatch, credencial rota, red) solo se ve en los
+    // logs del server; al cliente siempre le llega el 401 genérico.
+    console.error('[requireUser] verifyIdToken failed:', err);
     throw new HttpError(401, 'Token inválido o expirado');
   }
 }
