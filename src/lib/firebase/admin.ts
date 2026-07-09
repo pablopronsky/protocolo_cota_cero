@@ -20,13 +20,25 @@ function normalizePrivateKey(raw: string | undefined): string | undefined {
   return key.replace(/\\n/g, '\n');
 }
 
+// Variante a prueba de dashboards: la clave como base64 de UNA sola línea
+// (FIREBASE_ADMIN_PRIVATE_KEY_B64). Un valor de una línea no puede perder
+// saltos ni ganar comillas al pegarlo. Tiene prioridad sobre el PEM crudo.
+function resolvePrivateKey(): string | undefined {
+  const b64 = process.env.FIREBASE_ADMIN_PRIVATE_KEY_B64;
+  if (b64) {
+    const decoded = Buffer.from(b64.trim(), 'base64').toString('utf8');
+    if (decoded.includes('-----BEGIN')) return decoded;
+  }
+  return normalizePrivateKey(process.env.FIREBASE_ADMIN_PRIVATE_KEY);
+}
+
 function getAdminApp(): App {
   if (getApps().length === 0) {
     adminApp = initializeApp({
       credential: cert({
         projectId:   process.env.FIREBASE_ADMIN_PROJECT_ID,
         clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
-        privateKey:  normalizePrivateKey(process.env.FIREBASE_ADMIN_PRIVATE_KEY),
+        privateKey:  resolvePrivateKey(),
       }),
     });
   } else {

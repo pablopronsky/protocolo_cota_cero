@@ -46,3 +46,7 @@ next-env.d.ts
 # local dev artifacts
 dev.log
 .claude/
+
+# Secretos locales para configurar Vercel (nunca commitear)
+PEGAR_EN_VERCEL.txt
+scripts/tmp-*
