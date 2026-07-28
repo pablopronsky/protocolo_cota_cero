@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { useDoc, offlineLockError } from '@/hooks/useDoc';
-import { setDocStatus, writeRevision, reopenDoc } from '@/lib/repo/projects';
+import { setDocStatus, reopenDoc } from '@/lib/repo/projects';
 import { sequencingError } from '@/lib/sequencing';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
 import { Section } from '@/components/docs/Section';
@@ -34,6 +34,19 @@ const cleanLines = (xs: string[] = []): string[] => xs.map((s) => s.trim()).filt
 const EMPTY_FM: Partial<DocFM> = {
   usoRecomendado: [], productosAptos: [], productosNoAptos: [],
   frecuenciaLimpieza: '', precauciones: [], recomendaciones: '', observaciones: '',
+};
+
+const FM_OPTION_LABELS: Record<string, { title: string; detail: string }> = {
+  trafico_moderado: { title: 'Tránsito moderado', detail: 'Uso residencial y cotidiano' },
+  evitar_agua_estancada: { title: 'Sin agua estancada', detail: 'Retirar derrames cuanto antes' },
+  alfombras_antihumedad: { title: 'Cuidar los accesos', detail: 'Usar alfombras absorbentes' },
+  protectores_muebles: { title: 'Proteger los muebles', detail: 'Colocar fieltros o apoyos' },
+  temperatura_estable: { title: 'Temperatura estable', detail: 'Evitar cambios bruscos' },
+  no_mojar_exceso: { title: 'No mojar en exceso', detail: 'Usar microfibra bien escurrida' },
+  evitar_puntos_calor: { title: 'Evitar calor directo', detail: 'No apoyar fuentes de calor' },
+  no_arrastrar_muebles: { title: 'No arrastrar muebles', detail: 'Levantar las piezas pesadas' },
+  no_usar_abrasivos: { title: 'Sin productos abrasivos', detail: 'Evitar rayas y desgaste' },
+  ventilar_regularmente: { title: 'Ventilar regularmente', detail: 'Mantener el ambiente equilibrado' },
 };
 
 export default function FMForm({ projectCode, project, upstream, docData }: Props) {
@@ -102,7 +115,7 @@ export default function FMForm({ projectCode, project, upstream, docData }: Prop
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
     if (!await openConfirm('¿Marcar como completo? El documento quedará bloqueado.')) return;
-    cancelAutosave();
+    await cancelAutosave();
     setLocking(true);
     try {
       const values = {
@@ -115,7 +128,6 @@ export default function FMForm({ projectCode, project, upstream, docData }: Prop
         ...values, lockedSnapshot: snapshot, lockedAt: Date.now(), lockedBy: user?.uid ?? '',
         version: (fm?.version ?? 0) + 1,
       } as Partial<AnyDoc>, project.status, { docStatus: project.docStatus, upstream });
-      await writeRevision(projectCode, 'FM', 'completo', snapshot, (fm?.version ?? 0) + 1, user?.uid ?? '');
     } catch (e) {
       setLockErrors([e instanceof Error ? e.message : 'No se pudo bloquear el documento.']);
     } finally { setLocking(false); }
@@ -127,10 +139,10 @@ export default function FMForm({ projectCode, project, upstream, docData }: Prop
 
   async function handleReopen() {
     if (!await openConfirm('¿Reabrir este documento? Volverá a "en progreso" y quedará editable.', { danger: true })) return;
+    await cancelAutosave();
     setReopening(true);
     try {
-      await reopenDoc(projectCode, 'FM', user?.uid ?? '');
-      await writeRevision(projectCode, 'FM', 'en_progreso', (fm ?? {}) as Record<string, unknown>, (fm?.version ?? 0) + 1, user?.uid ?? '');
+      await reopenDoc(projectCode, 'FM', user?.uid ?? '', (fm ?? {}) as Record<string, unknown>, (fm?.version ?? 0) + 1);
       showToast('Documento reabierto', 'success');
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'No se pudo reabrir el documento.', 'error');
@@ -159,6 +171,13 @@ export default function FMForm({ projectCode, project, upstream, docData }: Prop
         </div>
       )}
 
+      <div className="rounded-lg border border-[#C38A5A]/20 bg-[#C38A5A]/[0.06] px-4 py-3">
+        <p className="text-[12px] font-bold text-[#2B2D2F]">Guía que recibe el cliente con la entrega</p>
+        <p className="text-[12px] leading-relaxed text-[#6B6155] mt-1">
+          Las sugerencias se preparan según el material instalado. Revisalas y ajustalas sólo si esta obra requiere un cuidado particular.
+        </p>
+      </div>
+
       <SectionNav sections={[
         { id: 'fm-uso', label: 'Uso recomendado', done: (fm?.usoRecomendado?.length ?? 0) > 0 },
         { id: 'fm-limpieza', label: 'Limpieza', done: !!fm?.frecuenciaLimpieza },
@@ -169,10 +188,10 @@ export default function FMForm({ projectCode, project, upstream, docData }: Prop
       {/* Heredados */}
       <div className="bg-[#F5F2ED] border border-[rgba(43,45,47,0.08)] rounded-lg px-4 py-3 space-y-2">
         <div className="flex items-center justify-between">
-          <p className="eyebrow">Material instalado · Solo lectura</p>
+          <p className="eyebrow">Material instalado · Referencia de la ficha</p>
           {materialInstalado?.tipo && (
             <span className="text-[10px] font-bold uppercase tracking-[0.18em] bg-[#C38A5A]/15 text-[#C38A5A] rounded px-2 py-0.5">
-              Defaults auto-detectados
+              Cuidados sugeridos para {materialInstalado.tipo}
             </span>
           )}
         </div>
@@ -185,11 +204,17 @@ export default function FMForm({ projectCode, project, upstream, docData }: Prop
 
       {/* Uso recomendado */}
       <Section id="fm-uso" title="Uso recomendado">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4">
+        <p className="text-[12px] leading-relaxed text-[#6B6155]">
+          Seleccioná las pautas que querés destacar en la ficha del cliente.
+        </p>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {USO_RECOMENDADO.map((u) => (
-            <label key={u} className="flex items-center gap-3 text-sm capitalize">
+            <label key={u} className="flex items-start gap-3 rounded-md border border-[rgba(43,45,47,0.10)] px-3 py-2.5 text-sm hover:border-[#C38A5A]/35 transition-colors">
               <input type="checkbox" value={u} {...register('usoRecomendado')} disabled={isLocked} />
-              {u.replace(/_/g, ' ')}
+              <span>
+                <strong className="block text-[13px] text-[#2B2D2F]">{FM_OPTION_LABELS[u]?.title ?? u.replace(/_/g, ' ')}</strong>
+                <span className="block text-[11px] text-[#6B6155] mt-0.5">{FM_OPTION_LABELS[u]?.detail}</span>
+              </span>
             </label>
           ))}
         </div>
@@ -207,37 +232,44 @@ export default function FMForm({ projectCode, project, upstream, docData }: Prop
             <option value="segun_uso">Según uso</option>
           </select>
         </div>
-        <div>
-          <label htmlFor="productosAptos" className={labelCls}>Productos aptos (uno por línea)</label>
-          <textarea
-            id="productosAptos"
-            rows={3}
-            className={inputCls}
-            disabled={isLocked}
-            value={(watch('productosAptos') ?? []).join('\n')}
-            onChange={(e) => setValue('productosAptos', splitLines(e.target.value))}
-          />
-        </div>
-        <div>
-          <label htmlFor="productosNoAptos" className={labelCls}>Productos NO aptos (uno por línea)</label>
-          <textarea
-            id="productosNoAptos"
-            rows={3}
-            className={inputCls}
-            disabled={isLocked}
-            value={(watch('productosNoAptos') ?? []).join('\n')}
-            onChange={(e) => setValue('productosNoAptos', splitLines(e.target.value))}
-          />
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="rounded-md border border-emerald-800/15 bg-emerald-50/60 p-3">
+            <label htmlFor="productosAptos" className="block text-[12px] font-bold text-emerald-900 mb-1.5">Productos recomendados</label>
+            <p className="text-[11px] text-emerald-900/65 mb-2">Uno por línea</p>
+            <textarea
+              id="productosAptos"
+              rows={5}
+              className={inputCls}
+              disabled={isLocked}
+              value={(watch('productosAptos') ?? []).join('\n')}
+              onChange={(e) => setValue('productosAptos', splitLines(e.target.value), { shouldDirty: true })}
+            />
+          </div>
+          <div className="rounded-md border border-red-800/15 bg-red-50/60 p-3">
+            <label htmlFor="productosNoAptos" className="block text-[12px] font-bold text-red-900 mb-1.5">Productos a evitar</label>
+            <p className="text-[11px] text-red-900/65 mb-2">Uno por línea</p>
+            <textarea
+              id="productosNoAptos"
+              rows={5}
+              className={inputCls}
+              disabled={isLocked}
+              value={(watch('productosNoAptos') ?? []).join('\n')}
+              onChange={(e) => setValue('productosNoAptos', splitLines(e.target.value), { shouldDirty: true })}
+            />
+          </div>
         </div>
       </Section>
 
       {/* Precauciones */}
       <Section id="fm-precauciones" title="Precauciones">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {PRECAUCIONES_FM.map((p) => (
-            <label key={p} className="flex items-center gap-3 text-sm capitalize">
+            <label key={p} className="flex items-start gap-3 rounded-md border border-[rgba(43,45,47,0.10)] px-3 py-2.5 text-sm hover:border-[#C38A5A]/35 transition-colors">
               <input type="checkbox" value={p} {...register('precauciones')} disabled={isLocked} />
-              {p.replace(/_/g, ' ')}
+              <span>
+                <strong className="block text-[13px] text-[#2B2D2F]">{FM_OPTION_LABELS[p]?.title ?? p.replace(/_/g, ' ')}</strong>
+                <span className="block text-[11px] text-[#6B6155] mt-0.5">{FM_OPTION_LABELS[p]?.detail}</span>
+              </span>
             </label>
           ))}
         </div>
@@ -256,7 +288,7 @@ export default function FMForm({ projectCode, project, upstream, docData }: Prop
       </Section>
 
       <div>
-        <label htmlFor="fmObservaciones" className={labelCls}>Observaciones del técnico</label>
+        <label htmlFor="fmObservaciones" className={labelCls}>Observaciones particulares de esta obra</label>
         <textarea id="fmObservaciones" rows={3} {...register('observaciones')} className={inputCls} disabled={isLocked} />
       </div>
 

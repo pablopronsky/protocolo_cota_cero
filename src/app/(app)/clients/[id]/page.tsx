@@ -3,7 +3,7 @@
 import { use, useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getClient, updateClient } from '@/lib/repo/clients';
-import { listAllProjects } from '@/lib/repo/projects';
+import { listProjectsByClient } from '@/lib/repo/projects';
 import { PROJECT_STATUS_BADGE, calcProgress, fmtDate } from '@/lib/projectDisplay';
 import { useAuth } from '@/hooks/useAuth';
 import type { Client, Project } from '@/schemas';
@@ -37,6 +37,7 @@ export default function ClientDetailPage({
   const [client, setClient] = useState<Client | null>(null);
   const [projects, setProjects] = useState<Project[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState('');
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
   const [editNombre, setEditNombre] = useState('');
@@ -48,19 +49,32 @@ export default function ClientDetailPage({
   const [savedOk, setSavedOk] = useState(false);
 
   useEffect(() => {
+    let active = true;
     const clientId = decodeURIComponent(id);
+    void Promise.resolve().then(() => {
+      if (!active) return;
+      setLoading(true);
+      setLoadError('');
+    });
+
     Promise.all([
       getClient(clientId),
-      listAllProjects(),
+      listProjectsByClient(clientId),
     ]).then(([c, ps]) => {
+      if (!active) return;
       setClient(c);
-      setProjects(
-        ps
-          .filter((p) => p.clienteId === clientId)
-          .sort((a, b) => b.updatedAt - a.updatedAt),
-      );
+      setProjects(ps);
+      setLoading(false);
+    }).catch((error: unknown) => {
+      if (!active) return;
+      console.error('[client detail]', error);
+      setClient(null);
+      setProjects([]);
+      setLoadError('No se pudieron cargar los datos del cliente.');
       setLoading(false);
     });
+
+    return () => { active = false; };
   }, [id]);
 
   function startEdit() {
@@ -109,6 +123,22 @@ export default function ClientDetailPage({
     return (
       <div className="py-20 text-center">
         <span className="text-[11px] font-mono uppercase tracking-[0.24em] text-[#6B6155]">Cargando…</span>
+      </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <div className="space-y-4">
+        <Link href="/clients" className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.24em] text-[#6B6155] hover:text-[#C38A5A] transition-colors">
+          <span className="text-base leading-none">←</span> Clientes
+        </Link>
+        <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3">
+          <p className="text-sm text-red-700">{loadError}</p>
+          <button type="button" onClick={() => window.location.reload()} className="mt-2 text-[11px] font-bold uppercase tracking-[0.18em] text-red-700 underline">
+            Reintentar
+          </button>
+        </div>
       </div>
     );
   }

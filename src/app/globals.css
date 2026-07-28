@@ -1,5 +1,13 @@
 @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;700;900&family=Roboto+Mono:wght@400;500;600&display=swap');
 
+@font-face {
+  font-family: 'Inter';
+  src: url('/brand/inter-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 700;
+  font-display: swap;
+}
+
 @import "tailwindcss";
 
 :root {
@@ -775,6 +783,300 @@ input[type="radio"] {
   color: #56514d;
 }
 
+/* Ficha de mantenimiento para el cliente. Se mantiene separada del cuerpo
+   técnico del legajo para priorizar lectura rápida y acciones concretas. */
+.maintenance-guide {
+  color: #2b2d2f;
+}
+
+.maintenance-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1.35fr) minmax(48mm, 0.65fr);
+  gap: 7mm;
+  align-items: end;
+  padding: 6mm;
+  background: #202123;
+  color: #f5f2ed;
+}
+
+.maintenance-kicker,
+.maintenance-section-label {
+  margin: 0 0 2mm;
+  color: #c38a5a;
+  font-size: 7pt;
+  font-weight: 900;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+}
+
+.maintenance-hero h2 {
+  margin: 0;
+  font-size: 22pt;
+  line-height: 1.02;
+  letter-spacing: -0.02em;
+}
+
+.maintenance-hero > div:first-child > p:last-child {
+  max-width: 105mm;
+  margin: 2.5mm 0 0;
+  color: rgba(245, 242, 237, 0.72);
+  font-size: 8.8pt;
+  line-height: 1.4;
+}
+
+.maintenance-material {
+  padding-left: 5mm;
+  border-left: 2px solid #c38a5a;
+}
+
+.maintenance-material span,
+.maintenance-material small {
+  display: block;
+}
+
+.maintenance-material span {
+  color: rgba(245, 242, 237, 0.56);
+  font-size: 6.6pt;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+
+.maintenance-material strong {
+  display: block;
+  margin: 1mm 0;
+  color: #c38a5a;
+  font-size: 19pt;
+  line-height: 1;
+}
+
+.maintenance-material small {
+  color: #f5f2ed;
+  font-size: 8.2pt;
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.maintenance-highlights {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border: 1px solid #ded7cd;
+  border-top: 0;
+}
+
+.maintenance-highlights > div {
+  min-height: 14mm;
+  padding: 3mm 4mm;
+  border-right: 1px solid #ded7cd;
+}
+
+.maintenance-highlights > div:last-child {
+  border-right: 0;
+}
+
+.maintenance-highlights span,
+.maintenance-attention span {
+  display: block;
+  margin-bottom: 1mm;
+  color: #8b8177;
+  font-size: 6.4pt;
+  font-weight: 900;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+}
+
+.maintenance-highlights strong {
+  display: block;
+  color: #2b2d2f;
+  font-size: 8.6pt;
+  line-height: 1.25;
+}
+
+.maintenance-columns {
+  display: grid;
+  grid-template-columns: 1.08fr 0.92fr;
+  gap: 6mm;
+  margin-top: 6mm;
+}
+
+.maintenance-steps {
+  display: grid;
+  gap: 2.4mm;
+}
+
+.maintenance-step {
+  display: grid;
+  grid-template-columns: 7mm 1fr;
+  gap: 3mm;
+  align-items: start;
+}
+
+.maintenance-step > span {
+  display: grid;
+  width: 7mm;
+  height: 7mm;
+  place-items: center;
+  border-radius: 999px;
+  background: #c38a5a;
+  color: #fff;
+  font-size: 7.4pt;
+  font-weight: 900;
+}
+
+.maintenance-step strong {
+  display: block;
+  color: #2b2d2f;
+  font-size: 9pt;
+  line-height: 1.25;
+}
+
+.maintenance-step p {
+  margin: 0.8mm 0 0;
+  color: #6b6155;
+  font-size: 8pt;
+  line-height: 1.38;
+}
+
+.maintenance-side {
+  display: grid;
+  gap: 3mm;
+}
+
+.maintenance-card {
+  padding: 3.5mm 4mm;
+  border: 1px solid;
+}
+
+.maintenance-card.is-ok {
+  border-color: rgba(49, 94, 80, 0.2);
+  background: rgba(49, 94, 80, 0.08);
+}
+
+.maintenance-card.is-avoid {
+  border-color: rgba(140, 62, 52, 0.18);
+  background: rgba(140, 62, 52, 0.07);
+}
+
+.maintenance-card.is-ok .maintenance-section-label { color: #315e50; }
+.maintenance-card.is-avoid .maintenance-section-label { color: #8c3e34; }
+
+.maintenance-card ul,
+.maintenance-care-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.maintenance-card li,
+.maintenance-care-list li {
+  position: relative;
+  padding-left: 3.5mm;
+  color: #56514d;
+  font-size: 7.8pt;
+  line-height: 1.35;
+}
+
+.maintenance-card li + li,
+.maintenance-care-list li + li {
+  margin-top: 1.3mm;
+}
+
+.maintenance-card li::before,
+.maintenance-care-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.52em;
+  width: 1.4mm;
+  height: 1.4mm;
+  border-radius: 999px;
+  background: #c38a5a;
+}
+
+.maintenance-card.is-ok li::before { background: #315e50; }
+.maintenance-card.is-avoid li::before { background: #8c3e34; }
+
+.maintenance-bottom {
+  display: grid;
+  grid-template-columns: 1.2fr 0.8fr;
+  gap: 5mm;
+  margin-top: 5mm;
+  padding-top: 4mm;
+  border-top: 1px solid #ded7cd;
+}
+
+.maintenance-care-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1.5mm 4mm;
+}
+
+.maintenance-care-list li + li {
+  margin-top: 0;
+}
+
+.maintenance-attention {
+  padding: 3.5mm 4mm;
+  border-left: 2px solid #c38a5a;
+  background: #f0e2d3;
+}
+
+.maintenance-attention span {
+  color: #8f5b33;
+}
+
+.maintenance-attention p {
+  margin: 0;
+  color: #2b2d2f;
+  font-size: 8.2pt;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.maintenance-note {
+  margin: 4mm 0 0;
+  padding-top: 3mm;
+  border-top: 1px solid #ded7cd;
+  color: #6b6155;
+  font-size: 7.7pt;
+  line-height: 1.4;
+}
+
+.maintenance-note strong {
+  color: #8f5b33;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+@media screen and (max-width: 720px) {
+  .maintenance-hero,
+  .maintenance-columns,
+  .maintenance-bottom {
+    grid-template-columns: 1fr;
+  }
+
+  .maintenance-material {
+    padding-top: 3mm;
+    padding-left: 0;
+    border-top: 1px solid rgba(245, 242, 237, 0.2);
+    border-left: 0;
+  }
+
+  .maintenance-highlights,
+  .maintenance-care-list {
+    grid-template-columns: 1fr;
+  }
+
+  .maintenance-highlights > div {
+    border-right: 0;
+    border-bottom: 1px solid #ded7cd;
+  }
+
+  .maintenance-highlights > div:last-child {
+    border-bottom: 0;
+  }
+}
+
 .print-empty {
   margin: 0;
   color: #8c8277;
@@ -824,4 +1126,183 @@ input[type="radio"] {
   table, tr, .doc-section { break-inside: avoid; }
   h1, h2, h3 { break-after: avoid; }
   a { text-decoration: none; color: inherit; }
+}
+
+/* ── Sistema editorial de documentos COTA CERO ───────────── */
+.print-shell {
+  --pdf-graphite: #1E2221;
+  --pdf-carbon: #343735;
+  --pdf-copper: #AD7657;
+  --pdf-paper: #F3F2EE;
+  --pdf-bone: #E7E5DF;
+  --pdf-line: #C7C4BC;
+  --pdf-positive: #2F5B4C;
+  --pdf-attention: #7C4B42;
+  font-family: Inter, Arial, sans-serif;
+}
+
+.print-flow-page { padding: 0 !important; page: document; background: var(--pdf-paper); }
+.print-document-section, .deliverable-document { break-before: page; }
+.print-document-frame {
+  width: 100%; min-height: 297mm; border: 0; border-collapse: collapse;
+  table-layout: fixed; color: var(--pdf-graphite); background: var(--pdf-paper);
+}
+.print-document-frame > thead > tr > td { padding: 0 15mm; }
+.print-document-frame > tbody > tr > td { padding: 2mm 15mm 8mm; vertical-align: top; }
+.print-document-frame > tfoot > tr > td { padding: 5mm 15mm 8mm; vertical-align: bottom; }
+.print-document-frame > thead { display: table-header-group; }
+.print-document-frame > tfoot { display: table-footer-group; }
+.print-doc-logo { display: block; width: 42mm; height: auto; }
+
+.print-doc-header, .deliverable-doc-header {
+  display: flex; align-items: flex-start; justify-content: space-between; gap: 12mm;
+  min-height: 31mm; margin: 0 0 7mm; padding: 14mm 0 4mm;
+  border-bottom: .35mm solid var(--pdf-graphite);
+}
+.print-doc-header > div:last-child, .deliverable-doc-header > div:last-child { text-align: right; }
+.deliverable-doc-header span, .deliverable-doc-header strong { display: block; text-transform: uppercase; }
+.deliverable-doc-header span { color: var(--pdf-carbon); font-size: 7pt; font-weight: 600; letter-spacing: .16em; }
+.deliverable-doc-header strong { margin-top: 1mm; font-size: 9pt; letter-spacing: .08em; }
+
+.print-doc-footer, .deliverable-doc-footer {
+  position: static; display: flex; align-items: center; justify-content: space-between; gap: 5mm;
+  margin: 0; padding-top: 2.5mm; border-top: 1px solid var(--pdf-line);
+  color: #737570; font-size: 6.6pt; font-weight: 600; letter-spacing: .12em; text-transform: uppercase;
+}
+.print-footer-date { margin-left: auto; }
+
+.deliverable-cover {
+  position: relative; display: grid; grid-template-rows: auto 1fr auto auto;
+  width: 210mm; min-height: 297mm; padding: 18mm 17mm 14mm; overflow: hidden;
+  break-after: page; color: var(--pdf-paper); background: var(--pdf-graphite);
+}
+.deliverable-cover::before, .legajo-cover::before {
+  content: ""; position: absolute; inset: 0; display: block; pointer-events: none;
+  background:
+    linear-gradient(90deg, rgba(243,242,238,.035) 1px, transparent 1px) 0 0 / 26mm 26mm,
+    linear-gradient(0deg, rgba(243,242,238,.03) 1px, transparent 1px) 0 0 / 26mm 26mm;
+}
+.deliverable-cover > * { position: relative; z-index: 1; }
+.deliverable-cover-top { display: flex; justify-content: space-between; align-items: flex-start; }
+.deliverable-cover-logo { width: 50mm; height: auto; }
+.deliverable-cover-top > div { text-align: right; text-transform: uppercase; }
+.deliverable-cover-top strong, .deliverable-cover-top span { display: block; }
+.deliverable-cover-top strong { font-size: 8pt; letter-spacing: .16em; }
+.deliverable-cover-top span { margin-top: 1mm; color: rgba(243,242,238,.7); font-size: 6.5pt; letter-spacing: .15em; }
+.deliverable-cover-main { align-self: center; max-width: 145mm; padding-left: 10mm; border-left: 1.2mm solid var(--pdf-copper); }
+.deliverable-cover-main p, .deliverable-doc-title p {
+  margin: 0 0 5mm; color: var(--pdf-copper); font-size: 7.5pt; font-weight: 700;
+  letter-spacing: .22em; text-transform: uppercase;
+}
+.deliverable-cover-main h1 { margin: 0; font-size: 42pt; font-weight: 500; line-height: .94; letter-spacing: -.03em; text-transform: uppercase; }
+.deliverable-cover-main h2 {
+  max-width: 130mm; margin: 6mm 0 0; padding-top: 5mm; border-top: 1px solid rgba(243,242,238,.28);
+  color: rgba(243,242,238,.76); font-size: 10.5pt; font-weight: 500; letter-spacing: .16em; text-transform: uppercase;
+}
+.deliverable-cover-main blockquote { margin: 10mm 0 0; max-width: 110mm; color: var(--pdf-paper); font-size: 12pt; font-style: italic; line-height: 1.45; }
+.deliverable-cover-status {
+  display: flex; align-items: center; gap: 5mm; padding: 5mm 0;
+  border-top: 1px solid rgba(243,242,238,.28); border-bottom: 1px solid rgba(243,242,238,.28);
+  color: var(--pdf-copper); text-transform: uppercase;
+}
+.deliverable-cover-status span { display: grid; width: 8mm; height: 8mm; place-items: center; border: 1px solid var(--pdf-copper); border-radius: 50%; }
+.deliverable-cover-status strong { font-size: 10pt; letter-spacing: .12em; }
+.deliverable-cover-meta { display: grid; grid-template-columns: 1.1fr .8fr 1.4fr; border-top: 1px solid rgba(243,242,238,.26); }
+.deliverable-cover-meta > div { min-height: 25mm; padding: 5mm 4mm 0 0; }
+.deliverable-cover-meta > div + div { padding-left: 5mm; border-left: 1px solid rgba(243,242,238,.22); }
+.deliverable-cover-meta span, .deliverable-cover-meta strong { display: block; }
+.deliverable-cover-meta span { color: rgba(243,242,238,.55); font-size: 6.4pt; font-weight: 700; letter-spacing: .15em; text-transform: uppercase; }
+.deliverable-cover-meta strong { margin-top: 2mm; color: var(--pdf-paper); font-size: 9pt; line-height: 1.3; }
+.deliverable-doc-title { display: flex; align-items: end; justify-content: space-between; gap: 8mm; margin-bottom: 8mm; }
+.deliverable-doc-title p { margin-bottom: 1mm; }
+.deliverable-doc-title h1 { max-width: 125mm; margin: 0; font-size: 26pt; font-weight: 600; line-height: 1; text-transform: uppercase; }
+
+.legajo-canvas { background: var(--pdf-paper); }
+.legajo-canvas::before { display: none; }
+.legajo-cover { background: var(--pdf-graphite); }
+.legajo-cover::before { display: block; }
+.legajo-cover-logo-image { display: block; width: 50mm; height: auto; }
+.legajo-cover-main h1 { font-weight: 500; }
+.legajo-cover-meta { gap: 0; }
+.legajo-meta-block { background: transparent; border-left: 0; border-top: 1px solid rgba(243,242,238,.25); }
+.legajo-meta-block + .legajo-meta-block { border-left: 1px solid rgba(243,242,238,.22); }
+.legajo-alert, .legajo-alert.is-ok { background: var(--pdf-bone); }
+
+.print-doc-section { margin-bottom: 6mm; }
+.print-doc-section.is-inherited { padding: 4mm; border-color: var(--pdf-line); background: rgba(231,229,223,.42); }
+.print-doc-section-title { margin-bottom: 3mm; border-color: var(--pdf-line); color: var(--pdf-copper); }
+.print-field { min-height: 16mm; border-color: var(--pdf-line); background: transparent; }
+.print-field strong { color: var(--pdf-graphite); }
+.print-chip-list span { border-radius: 0; border-color: var(--pdf-line); color: var(--pdf-carbon); }
+.print-data-table { border-color: var(--pdf-line); background: transparent; }
+.print-data-table th { color: var(--pdf-copper); background: var(--pdf-bone); }
+.print-data-table th, .print-data-table td { border-color: var(--pdf-line); }
+.print-data-table-group { display: grid; gap: 3mm; }
+.print-data-table-chunk { break-inside: avoid; }
+.print-data-table caption { padding: 0 0 1.5mm; color: #777872; font-size: 6.5pt; font-weight: 700; letter-spacing: .15em; text-align: left; text-transform: uppercase; }
+
+.print-signature { break-inside: avoid; }
+.print-signature-image { display: flex; height: 32mm; align-items: center; justify-content: center; overflow: hidden; border: 1px solid var(--pdf-line); background: rgba(255,255,255,.45); }
+.print-signature-image img { width: 100%; height: 100%; object-fit: contain; }
+.print-signature-image span { color: #858680; font-size: 7pt; text-transform: uppercase; letter-spacing: .12em; }
+.print-signature-meta { margin-top: 1mm; padding-top: 2mm; border-top: 1px solid var(--pdf-graphite); }
+.print-signature-meta div { color: #777872; font-size: 7pt; text-transform: uppercase; }
+.print-signature-meta strong, .print-signature-meta span { display: block; margin-top: 1mm; }
+
+.print-photo-section { break-before: page; break-inside: avoid; }
+.print-photo-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4mm 5mm; break-inside: avoid; }
+.print-photo { margin: 0; break-inside: avoid; }
+.print-photo-image { display: flex; height: 45mm; align-items: center; justify-content: center; overflow: hidden; background: var(--pdf-bone); }
+.print-photo-image img { width: 100%; height: 100%; object-fit: cover; }
+.print-photo-image > span { color: #777872; font-size: 7pt; text-transform: uppercase; }
+.print-photo figcaption { display: flex; justify-content: space-between; gap: 4mm; padding-top: 2mm; border-top: 1mm solid var(--pdf-copper); }
+.print-photo figcaption strong { font-size: 8pt; }
+.print-photo figcaption span { color: #777872; font-size: 7pt; white-space: nowrap; }
+
+.maintenance-guide { color: var(--pdf-graphite); }
+.maintenance-hero { grid-template-columns: 1.4fr .6fr; border: 1px solid var(--pdf-line); background: transparent; color: var(--pdf-graphite); }
+.maintenance-hero > div:first-child > p:last-child { color: var(--pdf-carbon); }
+.maintenance-material { border-color: var(--pdf-copper); }
+.maintenance-material span { color: #777872; }
+.maintenance-material strong { color: var(--pdf-copper); }
+.maintenance-material small { color: var(--pdf-graphite); }
+.maintenance-highlights { border-color: var(--pdf-line); }
+.maintenance-highlights > div { border-color: var(--pdf-line); }
+.maintenance-step > span { border-radius: 0; background: var(--pdf-copper); }
+.maintenance-card { background: transparent !important; border-color: var(--pdf-line) !important; }
+.maintenance-attention { background: var(--pdf-bone); border-color: var(--pdf-copper); }
+
+@media print {
+  @page { size: A4; margin: 0; }
+  @page document {
+    size: A4;
+    margin: 0 0 8mm;
+    @bottom-right {
+      content: "PÁGINA " counter(page, decimal-leading-zero) " / " counter(pages, decimal-leading-zero);
+      padding-right: 15mm;
+      color: #737570;
+      font-family: Inter, Arial, sans-serif;
+      font-size: 6.6pt;
+      font-weight: 600;
+      letter-spacing: .12em;
+    }
+  }
+  html, body { margin: 0; padding: 0; background: #F3F2EE; }
+  body { color: #1E2221; font-size: 10pt; }
+  .print-cover { min-height: 297mm; padding: 0 !important; }
+  .print-document-frame > thead { display: table-header-group; }
+  .print-document-frame > tfoot { display: table-footer-group; }
+  .print-data-table thead { display: table-header-group; }
+  .print-data-table { break-inside: avoid; }
+  .print-data-table tr,
+  .print-field,
+  .print-signature,
+  .print-photo,
+  .maintenance-step,
+  .maintenance-card { break-inside: avoid; }
+  .print-doc-section { break-inside: auto; }
+  .print-paragraph, .print-note-text { break-inside: avoid; orphans: 4; widows: 4; }
+  .print-document-section, .deliverable-document { break-before: page; }
+  .print-document-frame, .print-document-frame tr { break-inside: auto; }
+  .print-document-frame { min-height: 289mm; }
 }

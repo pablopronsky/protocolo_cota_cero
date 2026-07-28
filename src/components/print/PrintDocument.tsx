@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import Logo from '@/components/Logo';
 import { getProject, getAllDocs } from '@/lib/repo/projects';
 import { getPhotoUrl } from '@/lib/photos';
 import { buildLockedSnapshot } from '@/lib/inheritance';
 import { useAuth } from '@/hooks/useAuth';
 import { DOC_LABELS } from '@/schemas';
 import type { Project, DocType, AnyDoc, PhotoRef } from '@/schemas';
+import { PrintBrandLogo } from './PrintBrandLogo';
 
 interface Props {
   code: string;
@@ -74,10 +74,13 @@ export default function PrintDocument({ code, docType }: Props) {
 
   return (
     <div className="print-shell">
-      <div className="print-page">
-        <Header project={project} docType={docType} status={status} locked={locked} />
-        <Body docType={docType} project={project} s={snapshot} />
-        <Footer project={project} doc={doc} />
+      <div className="print-page print-flow-page">
+        <DocumentFrame
+          header={<Header project={project} docType={docType} status={status} locked={locked} />}
+          footer={<Footer project={project} doc={doc} />}
+        >
+          <Body docType={docType} project={project} s={snapshot} />
+        </DocumentFrame>
       </div>
       <PrintActions />
     </div>
@@ -94,14 +97,13 @@ export function Header({ project, docType, status, locked }: {
   return (
     <header className="print-doc-header">
       <div>
-        <Logo size="sm" />
-        <span>Superficies y terminaciones</span>
+        <PrintBrandLogo className="print-doc-logo" />
       </div>
       <div>
-        <span>{project.code}</span>
-        <strong><b>{docType}</b> - {DOC_LABELS[docType]}</strong>
+        <span>Protocolo de obra · {project.code}</span>
+        <strong><b>{docType}</b> · {DOC_LABELS[docType]}</strong>
         <small className={locked ? 'is-locked' : 'is-draft'}>
-          {locked ? humanize(status) : `${humanize(status)} - borrador`}
+          {locked ? humanize(status) : `${humanize(status)} · vista previa`}
         </small>
       </div>
     </header>
@@ -114,17 +116,30 @@ export function Footer({ project, doc, pageNumber, totalPages }: {
   pageNumber?: number;
   totalPages?: number;
 }) {
+  const [emittedAt] = useState(() => Date.now());
   return (
     <footer className="print-doc-footer">
       <span>{project.clienteNombre} - {project.code}</span>
-      <span>
-        {pageNumber && totalPages
-          ? `Página ${String(pageNumber).padStart(2, '0')}/${String(totalPages).padStart(2, '0')}`
-          : doc?.lockedAt
-          ? `Bloqueado: ${fmtDateTime(doc.lockedAt)}`
-          : `Generado: ${fmtDateTime(Date.now())}`}
+      {pageNumber && totalPages && <span>Página {String(pageNumber).padStart(2, '0')}/{String(totalPages).padStart(2, '0')}</span>}
+      <span className="print-footer-date">
+        {doc?.lockedAt ? `Cierre ${fmtDateTime(doc.lockedAt)}` : `Emisión ${fmtDateTime(emittedAt)}`}
       </span>
     </footer>
+  );
+}
+
+export function DocumentFrame({ header, footer, children, className = '' }: {
+  header: React.ReactNode;
+  footer: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+}) {
+  return (
+    <table className={`print-document-frame ${className}`}>
+      <thead><tr><td>{header}</td></tr></thead>
+      <tbody><tr><td className="print-document-frame-body">{children}</td></tr></tbody>
+      <tfoot><tr><td>{footer}</td></tr></tfoot>
+    </table>
   );
 }
 
@@ -142,13 +157,18 @@ export function PrintActions({ label = 'Imprimir / Guardar PDF' }: { label?: str
 
 // ── Cuerpo por tipo de documento ─────────────────────────────
 
-export function Body({ docType, project, s }: { docType: DocType; project: Project; s: Snapshot }) {
+export function Body({ docType, project, s, clientFacing = false }: {
+  docType: DocType;
+  project: Project;
+  s: Snapshot;
+  clientFacing?: boolean;
+}) {
   switch (docType) {
     case 'VT': return <VTBody project={project} s={s} />;
     case 'EP': return <EPBody s={s} />;
     case 'OT': return <OTBody project={project} s={s} />;
     case 'RF': return <RFBody s={s} />;
-    case 'AC': return <ACBody s={s} />;
+    case 'AC': return <ACBody s={s} clientFacing={clientFacing} />;
     case 'FM': return <FMBody s={s} />;
     default: return null;
   }
@@ -224,7 +244,7 @@ function EPBody({ s }: { s: Snapshot }) {
   const reparaciones = arr<{ zona?: string; accion?: string; producto?: string }>(s.reparacionesPrevias);
   return (
     <>
-      <Section title="Datos heredados de la VT" inherited>
+      <Section title="Antecedentes de la visita técnica" inherited>
         <Grid>
           <Field label="Estado soporte" value={humanize(s.estadoSoporte)} />
           <Field label="Material soporte" value={humanize(s.materialSoporte)} />
@@ -285,7 +305,7 @@ function OTBody({ project, s }: { project: Project; s: Snapshot }) {
   const incidencias = arr<{ fecha?: string; descripcion?: string; accion?: string; resuelto?: boolean }>(s.registroIncidencias);
   return (
     <>
-      <Section title="Datos heredados" inherited>
+      <Section title="Datos de referencia" inherited>
         <Field label="Domicilio de obra" value={`${project.domicilioObra.calle} ${project.domicilioObra.numero}, ${project.domicilioObra.localidad}`} />
         <Field label="Material a instalar" value={`${humanize(project.materialInstalado.tipo)} · ${project.materialInstalado.descripcion}`} />
         <Field label="Material del soporte" value={humanize(s.materialSoporte)} />
@@ -380,14 +400,14 @@ function RFBody({ s }: { s: Snapshot }) {
   );
 }
 
-function ACBody({ s }: { s: Snapshot }) {
+function ACBody({ s, clientFacing = false }: { s: Snapshot; clientFacing?: boolean }) {
   const cliente = obj(s.cliente);
   const dom = obj(s.domicilioObra);
   const fc = obj(s.firmaCliente);
   const fcc = obj(s.firmaCotaCero);
   return (
     <>
-      <Section title="Datos heredados" inherited>
+      <Section title={clientFacing ? 'Datos de la obra' : 'Datos de referencia'} inherited={!clientFacing}>
         <Field label="Cliente" value={str(cliente.nombre)} />
         <Field label="Domicilio de obra" value={dom.calle ? `${str(dom.calle)} ${str(dom.numero)}, ${str(dom.localidad)}` : '—'} />
         <Paragraph label="Obra ejecutada" value={s.obraEjecutada} />
@@ -405,7 +425,7 @@ function ACBody({ s }: { s: Snapshot }) {
         <SignatureBox
           title="Firma del cliente"
           name={str(fc.nombreAclaratorio)}
-          subtitle={fc.dni ? `DNI ${str(fc.dni)}` : ''}
+          subtitle={fc.dni ? `DNI ${formatDni(fc.dni)}` : ''}
           firma={fc.firma as PhotoRef | null}
         />
         <SignatureBox
@@ -460,13 +480,13 @@ function FMBody({ s }: { s: Snapshot }) {
 
 // ── Primitivas de presentación ───────────────────────────────
 
-function Section({ title, children, inherited }: {
-  title: string; children: React.ReactNode; inherited?: boolean;
+function Section({ title, children, inherited, className = '' }: {
+  title: string; children: React.ReactNode; inherited?: boolean; className?: string;
 }) {
   return (
-    <section className={`doc-section print-doc-section ${inherited ? 'is-inherited' : ''}`}>
+    <section className={`doc-section print-doc-section ${inherited ? 'is-inherited' : ''} ${className}`}>
       <h2 className="print-doc-section-title">
-        {title}{inherited ? ' - heredado' : ''}
+        {title}
       </h2>
       {children}
     </section>
@@ -529,25 +549,28 @@ function DataTable({ columns, rows, empty }: {
   columns: string[]; rows: (string | number)[][]; empty: string;
 }) {
   if (rows.length === 0) return <p className="print-empty">{empty}</p>;
+  const chunks: (string | number)[][][] = [];
+  for (let i = 0; i < rows.length; i += 12) chunks.push(rows.slice(i, i + 12));
   return (
-    <table className="print-data-table">
-      <thead>
-        <tr>
-          {columns.map((c) => (
-            <th key={c}>{c}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r, i) => (
-          <tr key={i}>
-            {r.map((cell, j) => (
-              <td key={j}>{cell === '' ? '-' : cell}</td>
+    <div className="print-data-table-group">
+      {chunks.map((chunk, chunkIndex) => (
+        <table className="print-data-table print-data-table-chunk" key={chunkIndex}>
+          {chunkIndex > 0 && <caption>Continuación</caption>}
+          <thead>
+            <tr>
+              {columns.map((c) => <th key={c}>{c}</th>)}
+            </tr>
+          </thead>
+          <tbody>
+            {chunk.map((r, i) => (
+              <tr key={i}>
+                {r.map((cell, j) => <td key={j}>{cell === '' ? '-' : cell}</td>)}
+              </tr>
             ))}
-          </tr>
-        ))}
-      </tbody>
-    </table>
+          </tbody>
+        </table>
+      ))}
+    </div>
   );
 }
 
@@ -577,17 +600,17 @@ function SignatureBox({ title, name, subtitle, firma }: {
 }) {
   const src = useResolvedPhoto(firma);
   return (
-    <div>
-      <div className="border border-[#B8AEA3] rounded h-28 flex items-center justify-center overflow-hidden bg-white">
+    <div className="print-signature">
+      <div className="print-signature-image">
         {src
           // eslint-disable-next-line @next/next/no-img-element
           ? <img src={src} alt={title} className="w-full h-full object-contain" />
-          : <span className="text-[10px] text-[#B8AEA3]">Firma</span>}
+          : <span>Espacio para firma</span>}
       </div>
-      <div className="border-t border-[#2B2D2F] mt-1 pt-1">
-        <div className="text-[10px] text-[#B8AEA3]">{title}</div>
-        {name && <div className="font-medium text-sm">{name}</div>}
-        {subtitle && <div className="text-xs text-[#B8AEA3]">{subtitle}</div>}
+      <div className="print-signature-meta">
+        <div>{title}</div>
+        {name && <strong>{name}</strong>}
+        {subtitle && <span>{subtitle}</span>}
       </div>
     </div>
   );
@@ -595,41 +618,56 @@ function SignatureBox({ title, name, subtitle, firma }: {
 
 function PhotoSection({ title, photos }: { title: string; photos: PhotoRef[] }) {
   if (photos.length === 0) return null;
+  const chunks: PhotoRef[][] = [];
+  for (let i = 0; i < photos.length; i += 8) chunks.push(photos.slice(i, i + 8));
   return (
-    <Section title={title}>
-      <div className="grid grid-cols-4 gap-2">
-        {photos.map((p) => <PhotoThumb key={p.id} photo={p} />)}
-      </div>
-    </Section>
+    <>
+      {chunks.map((chunk, index) => (
+        <Section title={index === 0 ? title : `${title} · continuación`} className="print-photo-section" key={index}>
+          <div className="print-photo-grid">
+            {chunk.map((p) => <PhotoThumb key={p.id} photo={p} />)}
+          </div>
+        </Section>
+      ))}
+    </>
   );
 }
 
 function PhotoThumb({ photo }: { photo: PhotoRef }) {
   const src = useResolvedPhoto(photo);
   return (
-    <div className="aspect-square border border-[#B8AEA3]/40 rounded overflow-hidden bg-[#F5F2ED] flex items-center justify-center">
-      {src
-        // eslint-disable-next-line @next/next/no-img-element
-        ? <img src={src} alt={photo.caption ?? ''} className="w-full h-full object-cover" />
-        : <span className="text-[9px] text-[#B8AEA3] font-mono">{photo.pending ? 'pendiente' : 'foto'}</span>}
-    </div>
+    <figure className="print-photo">
+      <div className="print-photo-image">
+        {src
+          // eslint-disable-next-line @next/next/no-img-element
+          ? <img src={src} alt={photo.caption ?? 'Registro fotográfico'} />
+          : <span>{photo.pending ? 'Imagen pendiente de sincronización' : 'Imagen no disponible'}</span>}
+      </div>
+      <figcaption>
+        <strong>{photo.caption || 'Registro de obra'}</strong>
+        <span>{fmtDate(photo.takenAt)}</span>
+      </figcaption>
+    </figure>
   );
 }
 
 // Resuelve la URL de una foto: usa el blob local si está en sesión, si no baja
 // la URL de Storage (solo si ya se subió).
 function useResolvedPhoto(photo: PhotoRef | null | undefined): string | null {
-  const [url, setUrl] = useState<string | null>(photo?.localBlob ?? null);
+  const localBlob = photo?.localBlob ?? null;
+  const pending = photo?.pending ?? false;
+  const storagePath = photo?.storagePath ?? null;
+  const [url, setUrl] = useState<string | null>(localBlob);
   useEffect(() => {
     let alive = true;
-    if (photo?.localBlob) { setUrl(photo.localBlob); return; }
-    if (photo && !photo.pending && photo.storagePath) {
-      getPhotoUrl(photo.storagePath).then((u) => { if (alive) setUrl(u); }).catch(() => {});
+    if (localBlob) { setUrl(localBlob); return; }
+    if (!pending && storagePath) {
+      getPhotoUrl(storagePath).then((u) => { if (alive) setUrl(u); }).catch(() => {});
     } else {
       setUrl(null);
     }
     return () => { alive = false; };
-  }, [photo?.id, photo?.localBlob, photo?.pending, photo?.storagePath]);
+  }, [localBlob, pending, storagePath]);
   return url;
 }
 
@@ -641,6 +679,10 @@ function humanize(v: unknown): string {
 }
 function str(v: unknown): string {
   return v == null ? '' : String(v);
+}
+function formatDni(v: unknown): string {
+  const value = str(v).replace(/\D/g, '');
+  return value ? value.replace(/\B(?=(\d{3})+(?!\d))/g, '.') : '';
 }
 function num(v: unknown): string {
   if (v == null || v === '') return '0';
@@ -657,9 +699,9 @@ function obj(v: unknown): Record<string, unknown> {
   return v && typeof v === 'object' ? (v as Record<string, unknown>) : {};
 }
 function fmtDate(v: unknown): string {
+  if (v == null || v === '') return '—';
+  const d = new Date(typeof v === 'number' ? v : str(v));
   const sv = str(v);
-  if (!sv) return '—';
-  const d = new Date(sv);
   return Number.isNaN(d.getTime()) ? sv : d.toLocaleDateString('es-AR');
 }
 function fmtDateTime(ms: unknown): string {

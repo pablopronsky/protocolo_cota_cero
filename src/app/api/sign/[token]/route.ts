@@ -14,6 +14,12 @@ class SignError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
 
+const NO_STORE = { 'Cache-Control': 'private, no-store, max-age=0' };
+
+function response(body: unknown, status = 200) {
+  return NextResponse.json(body, { status, headers: NO_STORE });
+}
+
 async function loadValidRequest(token: string): Promise<SignRequest> {
   if (!SIGN_TOKEN_RE.test(token)) throw new SignError(404, 'Link inválido');
   const snap = await getAdminDb().doc(`signRequests/${token}`).get();
@@ -27,13 +33,13 @@ async function loadValidRequest(token: string): Promise<SignRequest> {
 
 function errorResponse(err: unknown) {
   if (err instanceof SignError) {
-    return NextResponse.json({ error: err.message }, { status: err.status });
+    return response({ error: err.message }, err.status);
   }
   if (err instanceof ZodError) {
-    return NextResponse.json({ error: err.issues[0]?.message ?? 'Datos inválidos' }, { status: 400 });
+    return response({ error: err.issues[0]?.message ?? 'Datos invalidos' }, 400);
   }
   console.error('[sign public]', err);
-  return NextResponse.json({ error: 'Error interno' }, { status: 500 });
+  return response({ error: 'Error interno' }, 500);
 }
 
 // Datos mínimos para que el cliente reconozca su obra en la página de firma.
@@ -59,10 +65,13 @@ export async function GET(
     }
 
     const d = project.domicilioObra;
-    return NextResponse.json({
+    return response({
+      projectCode: project.code,
       clienteNombre: project.clienteNombre,
       domicilio: `${d.calle} ${d.numero}, ${d.localidad}`,
       obraEjecutada: otSnap.exists ? ((otSnap.data() as DocOT).alcance ?? '') : '',
+      materialTipo: project.materialInstalado.tipo,
+      materialDescripcion: project.materialInstalado.descripcion,
     });
   } catch (err) {
     return errorResponse(err);
@@ -76,9 +85,12 @@ export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ token: string }> },
 ) {
+  let uploadedPath: string | null = null;
   try {
     const { token } = await params;
     const r = await loadValidRequest(token);
+    const contentLength = Number(req.headers.get('content-length') ?? 0);
+    if (contentLength > 1_100_000) throw new SignError(413, 'Solicitud demasiado pesada');
     const input = SubmitSignatureInput.parse(await req.json());
     const db = getAdminDb();
 
@@ -88,11 +100,19 @@ export async function POST(
     const storagePath = `projects/${r.projectCode}/AC/${id}.jpg`;
     const base64 = input.firmaDataUrl.slice('data:image/jpeg;base64,'.length);
     const buffer = Buffer.from(base64, 'base64');
-    if (buffer.length < 100) throw new SignError(400, 'La firma llegó vacía. Probá de nuevo.');
+    const isJpeg = buffer.length >= 100
+      && buffer[0] === 0xff
+      && buffer[1] === 0xd8
+      && buffer[2] === 0xff
+      && buffer[buffer.length - 2] === 0xff
+      && buffer[buffer.length - 1] === 0xd9;
+    if (!isJpeg) throw new SignError(400, 'La firma no es un JPEG valido');
     await getAdminBucket().file(storagePath).save(buffer, {
       contentType: 'image/jpeg',
       resumable: false,
+      metadata: { cacheControl: 'private, no-store, max-age=0' },
     });
+    uploadedPath = storagePath;
 
     const firma: PhotoRef = {
       id,
@@ -108,12 +128,15 @@ export async function POST(
     const reqRef = db.doc(`signRequests/${token}`);
     const acRef = db.doc(`projects/${r.projectCode}/documents/AC`);
     const projRef = db.doc(`projects/${r.projectCode}`);
+    const pendingQuery = db.collection('signRequests')
+      .where('projectCode', '==', r.projectCode)
+      .where('status', '==', 'pending');
 
     await db.runTransaction(async (tx) => {
       // Revalidar DENTRO de la transacción: un solo uso, sin carreras entre
       // dos envíos simultáneos o contra una firma presencial.
-      const [reqSnap, acSnap, projSnap] = await Promise.all([
-        tx.get(reqRef), tx.get(acRef), tx.get(projRef),
+      const [reqSnap, acSnap, projSnap, pendingSnap] = await Promise.all([
+        tx.get(reqRef), tx.get(acRef), tx.get(projRef), tx.get(pendingQuery),
       ]);
       if (!reqSnap.exists || !acSnap.exists || !projSnap.exists) {
         throw new SignError(404, 'Link inválido');
@@ -129,7 +152,11 @@ export async function POST(
       const project = projSnap.data() as Project;
       const now = Date.now();
 
-      tx.update(reqRef, { status: 'completed', signedAt: now });
+      pendingSnap.docs.forEach((requestDoc) => {
+        tx.update(requestDoc.ref, requestDoc.id === token
+          ? { status: 'completed', signedAt: now }
+          : { status: 'cancelled' });
+      });
       tx.update(acRef, {
         conformidad: input.conformidad,
         observacionesCliente: input.observacionesCliente,
@@ -153,9 +180,17 @@ export async function POST(
         });
       }
     });
+    uploadedPath = null;
 
-    return NextResponse.json({ ok: true });
+    return response({ ok: true });
   } catch (err) {
+    if (uploadedPath) {
+      try {
+        await getAdminBucket().file(uploadedPath).delete({ ignoreNotFound: true });
+      } catch (cleanupError) {
+        console.error('[sign public] orphan cleanup failed', cleanupError);
+      }
+    }
     return errorResponse(err);
   }
 }

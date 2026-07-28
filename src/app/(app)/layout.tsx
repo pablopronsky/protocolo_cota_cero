@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import Link from 'next/link';
 import { useAuth, logout } from '@/hooks/useAuth';
@@ -50,12 +50,6 @@ const IconAjustes = () => (
     <path d="M8 1v2M8 13v2M1 8h2M13 8h2M2.93 2.93l1.41 1.41M11.66 11.66l1.41 1.41M2.93 13.07l1.41-1.41M11.66 4.34l1.41-1.41" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"/>
   </svg>
 );
-const IconChevron = () => (
-  <svg width="10" height="10" viewBox="0 0 10 10" fill="none">
-    <path d="M2.5 4L5 6.5L7.5 4" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"/>
-  </svg>
-);
-
 /* ── Nav item ────────────────────────────────────────────── */
 function NavItem({
   href,
@@ -79,7 +73,11 @@ function NavItem({
   }`;
   if (disabled) return <span className={cls}>{icon}{label}</span>;
   return (
-    <Link href={href} className={cls}>
+    <Link
+      href={href}
+      className={`${cls} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A] focus-visible:ring-inset`}
+      aria-current={active ? 'page' : undefined}
+    >
       {icon}
       {label}
     </Link>
@@ -116,6 +114,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const drawerRef = useRef<HTMLElement>(null);
+  const closeDrawerRef = useRef<HTMLButtonElement>(null);
+  const openDrawerRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!loading && !user) router.replace('/login');
@@ -131,20 +132,52 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     setDrawerOpen(false);
   }, [pathname]);
 
-  // Cierra el drawer con Escape.
+  // El drawer móvil se comporta como un panel modal: bloquea el scroll,
+  // conserva el foco adentro y lo devuelve al botón que lo abrió.
   useEffect(() => {
     if (!drawerOpen) return;
+    const openDrawerButton = openDrawerRef.current;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const focusFrame = window.requestAnimationFrame(() => closeDrawerRef.current?.focus());
+
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key === 'Escape') setDrawerOpen(false);
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setDrawerOpen(false);
+        return;
+      }
+      if (e.key !== 'Tab') return;
+      const focusables = Array.from(
+        drawerRef.current?.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ) ?? [],
+      );
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     }
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener('keydown', onKeyDown);
+      document.body.style.overflow = previousOverflow;
+      openDrawerButton?.focus();
+    };
   }, [drawerOpen]);
 
   if (loading || !user) {
     return (
-      <div className="min-h-dvh flex items-center justify-center bg-[#F5F2ED]">
+      <div className="min-h-dvh flex items-center justify-center bg-[#F5F2ED]" role="status">
         <span className="text-[#2B2D2F]"><Logo size="sm" /></span>
+        <span className="sr-only">Cargando la aplicación…</span>
       </div>
     );
   }
@@ -158,17 +191,27 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
     <ToastProvider>
     <UnsavedChangesGuard />
     <div className="min-h-dvh flex bg-[#F5F2ED]">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[70] focus:rounded focus:bg-white focus:px-4 focus:py-3 focus:text-[13px] focus:font-bold focus:text-[#2B2D2F] focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-[#C38A5A]"
+      >
+        Saltar al contenido
+      </a>
       {/* ── Overlay (mobile drawer) ────────────────────────── */}
       {drawerOpen && (
-        <div
+        <button
+          type="button"
+          tabIndex={-1}
           className="fixed inset-0 bg-black/40 z-20 lg:hidden"
           onClick={() => setDrawerOpen(false)}
-          aria-hidden="true"
+          aria-label="Cerrar menú"
         />
       )}
 
       {/* ── Sidebar / drawer ───────────────────────────────── */}
       <aside
+        ref={drawerRef}
+        id="app-navigation"
         className={`fixed inset-y-0 left-0 z-30 w-[188px] shrink-0 bg-[#1A1B1D] flex flex-col h-dvh transform transition-transform duration-200 lg:translate-x-0 lg:sticky lg:top-0 lg:z-10 ${
           drawerOpen ? 'translate-x-0' : '-translate-x-full'
         }`}
@@ -176,14 +219,15 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       >
         {/* Logo */}
         <div className="flex items-center justify-between px-5 pt-5 pb-5 border-b border-white/[0.06]">
-          <Link href="/projects" className="block" onClick={() => setDrawerOpen(false)}>
+          <Link href="/projects" className="block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A]" onClick={() => setDrawerOpen(false)}>
             <span className="text-[#F5F2ED]">
               <Logo size="sm" />
             </span>
           </Link>
           <button
+            ref={closeDrawerRef}
             type="button"
-            className="lg:hidden text-[#B8AEA3] hover:text-[#F5F2ED] p-1"
+            className="lg:hidden text-[#B8AEA3] hover:text-[#F5F2ED] p-2 min-w-11 min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A]"
             onClick={() => setDrawerOpen(false)}
             aria-label="Cerrar menú"
           >
@@ -191,8 +235,12 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
+        <div className="px-2 pt-4 md:hidden">
+          <GlobalSearch />
+        </div>
+
         {/* Nav */}
-        <nav className="flex-1 pt-6 flex flex-col gap-0.5 px-2">
+        <nav className="flex-1 pt-4 md:pt-6 flex flex-col gap-0.5 px-2">
           {role === 'admin' && (
             <NavItem
               href="/protocol"
@@ -244,10 +292,13 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
         {/* Top bar */}
         <header className="h-11 px-4 lg:px-8 flex items-center gap-3 lg:gap-6 border-b border-[rgba(43,45,47,0.08)] shrink-0 bg-[#F5F2ED]">
           <button
+            ref={openDrawerRef}
             type="button"
-            className="lg:hidden text-[#2B2D2F] p-1 -ml-1"
+            className="lg:hidden text-[#2B2D2F] p-2 -ml-2 min-w-11 min-h-11 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A]"
             onClick={() => setDrawerOpen(true)}
             aria-label="Abrir menú"
+            aria-controls="app-navigation"
+            aria-expanded={drawerOpen}
           >
             <IconMenu />
           </button>
@@ -265,15 +316,16 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
             {displayName}
           </span>
           <button
+            type="button"
             onClick={() => logout().then(() => router.replace('/login'))}
-            className="inline-flex items-center h-full px-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[#6B6155] hover:text-[#2B2D2F] transition-colors cursor-pointer"
+            className="inline-flex items-center h-full px-1 text-[11px] font-bold uppercase tracking-[0.22em] text-[#6B6155] hover:text-[#2B2D2F] transition-colors cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A] focus-visible:ring-inset"
           >
             Salir
           </button>
         </header>
 
         {/* Page */}
-        <main className="flex-1 px-4 py-6 lg:px-8 lg:py-8 overflow-x-auto">
+        <main id="main-content" tabIndex={-1} className="flex-1 px-4 py-6 lg:px-8 lg:py-8 overflow-x-auto focus:outline-none">
           {children}
         </main>
       </div>

@@ -13,7 +13,11 @@ export interface AuthState {
   loading: boolean;
 }
 
-export function useAuth(): AuthState {
+interface UseAuthOptions {
+  loadProfile?: boolean;
+}
+
+export function useAuth({ loadProfile = true }: UseAuthOptions = {}): AuthState {
   const [state, setState] = useState<AuthState>({
     user: null,
     appUser: null,
@@ -23,25 +27,48 @@ export function useAuth(): AuthState {
 
   useEffect(() => {
     const auth = getFirebaseAuth();
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let active = true;
+
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
       if (!user) {
         setState({ user: null, appUser: null, role: null, loading: false });
         return;
       }
 
-      // forceRefresh:true garantiza que un cambio de rol (custom claim) se refleje
-      // en la próxima carga sin tener que cerrar sesión.
-      const tokenResult = await user.getIdTokenResult(true);
-      const role = (tokenResult.claims.role as 'admin' | 'tecnico') ?? null;
+      // Las pantallas que sólo necesitan una sesión autenticada no deben esperar
+      // la renovación de claims ni la lectura del perfil.
+      if (!loadProfile) {
+        setState({ user, appUser: null, role: null, loading: false });
+        return;
+      }
 
-      const db = getFirebaseDb();
-      const snap = await getDoc(doc(db, 'users', user.uid));
-      const appUser = snap.exists() ? (snap.data() as AppUser) : null;
+      void (async () => {
+        try {
+          // forceRefresh:true garantiza que un cambio de rol (custom claim) se
+          // refleje en la próxima carga sin tener que cerrar sesión.
+          const tokenResult = await user.getIdTokenResult(true);
+          const role = (tokenResult.claims.role as 'admin' | 'tecnico') ?? null;
 
-      setState({ user, appUser, role, loading: false });
+          const db = getFirebaseDb();
+          const snap = await getDoc(doc(db, 'users', user.uid));
+          const appUser = snap.exists() ? (snap.data() as AppUser) : null;
+
+          if (active && auth.currentUser?.uid === user.uid) {
+            setState({ user, appUser, role, loading: false });
+          }
+        } catch (error) {
+          if (active && auth.currentUser?.uid === user.uid) {
+            setState({ user, appUser: null, role: null, loading: false });
+          }
+          console.error('No se pudo cargar el perfil del usuario.', error);
+        }
+      })();
     });
-    return unsubscribe;
-  }, []);
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, [loadProfile]);
 
   return state;
 }

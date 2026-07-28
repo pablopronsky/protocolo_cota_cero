@@ -73,13 +73,27 @@ export default function ProjectsPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('activos');
   const [page, setPage] = useState(0);
+  const [loadError, setLoadError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
-    listAllProjects().then((ps) => {
-      setAllProjects(ps);
-      setLoading(false);
-    });
-  }, []);
+    let active = true;
+    setLoading(true);
+    setLoadError('');
+    listAllProjects()
+      .then((ps) => {
+        if (active) setAllProjects(ps);
+      })
+      .catch(() => {
+        if (active) setLoadError('No se pudieron cargar los proyectos. Revisá tu conexión e intentá de nuevo.');
+      })
+      .finally(() => {
+        if (active) setLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [reloadToken]);
 
   const filtered = allProjects.filter((p) => {
     const matchSearch =
@@ -132,7 +146,7 @@ export default function ProjectsPage() {
         {role === 'admin' && (
           <Link
             href="/projects/new"
-            className="shrink-0 border border-[#2B2D2F]/25 text-[#2B2D2F] text-[11px] font-bold uppercase tracking-[0.22em] px-5 py-2.5 rounded hover:border-[#C38A5A] hover:text-[#C38A5A] transition-colors mt-1"
+            className="shrink-0 inline-flex min-h-11 items-center justify-center border border-[#2B2D2F]/25 text-[#2B2D2F] text-[11px] font-bold uppercase tracking-[0.22em] px-5 py-2.5 rounded hover:border-[#C38A5A] hover:text-[#C38A5A] transition-colors mt-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A] focus-visible:ring-offset-2"
           >
             + Nuevo Proyecto
           </Link>
@@ -142,22 +156,28 @@ export default function ProjectsPage() {
       {/* ── Filters ──────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1 sm:max-w-[480px]">
+          <label htmlFor="projects-search" className="sr-only">
+            Buscar proyectos por cliente, código o localidad
+          </label>
           <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B6155] pointer-events-none">
             <IconSearch />
           </span>
           <input
+            id="projects-search"
             type="search"
             placeholder="Buscar por cliente, código o localidad"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full border border-[rgba(43,45,47,0.12)] rounded-md pl-9 pr-4 py-2.5 text-[13px] bg-white placeholder:text-[#8C8275] focus:border-[#C38A5A] focus:outline-none transition-colors"
+            className="w-full min-h-11 border border-[rgba(43,45,47,0.12)] rounded-md pl-9 pr-4 py-2.5 text-[13px] bg-white placeholder:text-[#8C8275] focus:border-[#C38A5A] focus:outline-none focus:ring-2 focus:ring-[#C38A5A]/20 transition-colors"
           />
         </div>
         <div className="relative">
+          <label htmlFor="projects-status" className="sr-only">Filtrar proyectos por estado</label>
           <select
+            id="projects-status"
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
-            className="appearance-none border border-[rgba(43,45,47,0.12)] rounded-md pl-4 pr-9 py-2.5 text-[13px] bg-white text-[#2B2D2F] focus:border-[#C38A5A] focus:outline-none transition-colors cursor-pointer"
+            className="appearance-none min-h-11 border border-[rgba(43,45,47,0.12)] rounded-md pl-4 pr-9 py-2.5 text-[13px] bg-white text-[#2B2D2F] focus:border-[#C38A5A] focus:outline-none focus:ring-2 focus:ring-[#C38A5A]/20 transition-colors cursor-pointer"
           >
             <option value="activos">Activos</option>
             <option value="todos">Todos</option>
@@ -178,15 +198,29 @@ export default function ProjectsPage() {
 
       {/* ── Loading ───────────────────────────────────────── */}
       {loading && (
-        <div className="space-y-2">
+        <div className="space-y-2" role="status" aria-live="polite">
+          <span className="sr-only">Cargando proyectos…</span>
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-16 rounded-lg" />
           ))}
         </div>
       )}
 
+      {!loading && loadError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-4" role="alert">
+          <p className="text-[13px] text-red-800">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => setReloadToken((token) => token + 1)}
+            className="mt-3 min-h-11 rounded border border-red-300 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-red-800 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
       {/* ── Table ────────────────────────────────────────── */}
-      {!loading && (
+      {!loading && !loadError && (
         <>
           {filtered.length === 0 ? (
             <EmptyState
@@ -216,7 +250,11 @@ export default function ProjectsPage() {
                 const badge = STATUS_BADGE[p.status] ?? STATUS_BADGE.borrador;
                 const progress = calcProgress(p.docStatus);
                 return (
-                  <div key={p.code} onClick={() => router.push(`/projects/${p.code}`)} className="cursor-pointer">
+                  <Link
+                    key={p.code}
+                    href={`/projects/${p.code}`}
+                    className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A] focus-visible:ring-offset-2"
+                  >
                     <Card>
                       <div className="flex items-center justify-between gap-2 mb-2">
                         <span className="font-bold text-[14px] text-[#2B2D2F] tracking-tight">{p.code}</span>
@@ -227,13 +265,20 @@ export default function ProjectsPage() {
                       <p className="text-[13px] text-[#2B2D2F] mb-1">{p.clienteNombre}</p>
                       <p className="text-[12px] text-[#6B6155] mb-3">{fmtDate(p.createdAt)}</p>
                       <div className="flex items-center gap-3">
-                        <div className="flex-1 h-1.5 bg-[#B8AEA3]/20 rounded-full overflow-hidden">
+                        <div
+                          className="flex-1 h-1.5 bg-[#B8AEA3]/20 rounded-full overflow-hidden"
+                          role="progressbar"
+                          aria-label={`Progreso del proyecto ${p.code}`}
+                          aria-valuemin={0}
+                          aria-valuemax={100}
+                          aria-valuenow={progress}
+                        >
                           <div className="h-full bg-[#C38A5A] rounded-full transition-all" style={{ width: `${progress}%` }} />
                         </div>
                         <span className="text-[12px] text-[#6B6155] font-mono w-8">{progress}%</span>
                       </div>
                     </Card>
-                  </div>
+                  </Link>
                 );
               })}
             </div>
@@ -307,7 +352,7 @@ export default function ProjectsPage() {
                         <td className="px-5 py-4" onClick={(e) => e.stopPropagation()}>
                           <Link
                             href={`/projects/${p.code}`}
-                            className="p-2.5 -m-2.5 text-[#6B6155] hover:text-[#C38A5A] transition-colors inline-flex"
+                            className="p-2.5 -m-2.5 text-[#6B6155] hover:text-[#C38A5A] transition-colors inline-flex focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A]"
                             title="Ver"
                             aria-label={`Ver proyecto ${p.code}`}
                           >
@@ -330,23 +375,25 @@ export default function ProjectsPage() {
                 {filtered.length} Proyecto{filtered.length !== 1 ? 's' : ''}
               </span>
               <div className="flex items-center gap-4">
-                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155]">
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155]" aria-live="polite">
                   Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
                 </span>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1" role="group" aria-label="Paginación de proyectos">
                   <button
+                    type="button"
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={page === 0}
                     aria-label="Página anterior"
-                    className="w-11 h-11 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+                    className="w-11 h-11 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A] focus-visible:ring-offset-2"
                   >
                     <IconChevronLeft />
                   </button>
                   <button
+                    type="button"
                     onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                     disabled={page >= totalPages - 1}
                     aria-label="Página siguiente"
-                    className="w-11 h-11 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+                    className="w-11 h-11 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A] focus-visible:ring-offset-2"
                   >
                     <IconChevronRight />
                   </button>

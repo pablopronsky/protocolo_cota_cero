@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useDoc, offlineLockError } from '@/hooks/useDoc';
-import { setDocStatus, writeRevision, reopenDoc } from '@/lib/repo/projects';
+import { setDocStatus, reopenDoc } from '@/lib/repo/projects';
 import { sequencingError } from '@/lib/sequencing';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
 import { enqueuePhoto, removePhotoFromDoc } from '@/lib/photos';
@@ -52,7 +52,7 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
 
   const seed = deriveInherited(project, upstream, 'RF');
 
-  const { register, control, watch, getValues, setValue, reset } = useForm<DocRF>({
+  const { register, control, watch, getValues, reset } = useForm<DocRF>({
     defaultValues: rf ?? (EMPTY_RF as DocRF),
   });
 
@@ -118,7 +118,7 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
       ? '¿Aprobar y firmar la revisión? El documento quedará bloqueado.'
       : '¿Firmar la revisión como NO apta para entrega? El acta no podrá firmarse hasta corregir la obra y reabrir la revisión. El documento quedará bloqueado.';
     if (!await openConfirm(confirmMsg, { danger: !values.aptoEntrega })) return;
-    cancelAutosave();
+    await cancelAutosave();
     setLocking(true);
     try {
       const { registroFotografico: _, ...restValues } = values;
@@ -133,7 +133,6 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
         ...fullValues, lockedSnapshot: snapshot, lockedAt: Date.now(), lockedBy: user?.uid ?? '',
         version: (rf?.version ?? 0) + 1,
       } as Partial<AnyDoc>, project.status, { docStatus: project.docStatus, upstream });
-      await writeRevision(projectCode, 'RF', 'firmado', snapshot, (rf?.version ?? 0) + 1, user?.uid ?? '');
     } catch (e) {
       setLockErrors([e instanceof Error ? e.message : 'No se pudo firmar la revisión.']);
     } finally { setLocking(false); }
@@ -172,10 +171,10 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
 
   async function handleReopen() {
     if (!await openConfirm('¿Reabrir este documento? Volverá a "en progreso" y quedará editable.', { danger: true })) return;
+    await cancelAutosave();
     setReopening(true);
     try {
-      await reopenDoc(projectCode, 'RF', user?.uid ?? '');
-      await writeRevision(projectCode, 'RF', 'en_progreso', (rf ?? {}) as Record<string, unknown>, (rf?.version ?? 0) + 1, user?.uid ?? '');
+      await reopenDoc(projectCode, 'RF', user?.uid ?? '', (rf ?? {}) as Record<string, unknown>, (rf?.version ?? 0) + 1);
       showToast('Documento reabierto', 'success');
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'No se pudo reabrir el documento.', 'error');

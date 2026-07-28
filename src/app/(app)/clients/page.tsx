@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { listClients } from '@/lib/repo/clients';
 import { listAllProjects } from '@/lib/repo/projects';
 import { Card } from '@/components/ui/Card';
@@ -60,8 +61,13 @@ export default function ClientsPage() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(0);
+  const [loadError, setLoadError] = useState('');
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setLoadError('');
     Promise.all([listClients(), listAllProjects()]).then(([clients, projects]) => {
       // Indexar proyectos por clienteId para calcular métricas
       const byClient = new Map<string, Project[]>();
@@ -79,10 +85,16 @@ export default function ClientsPage() {
       });
 
       enriched.sort((a, b) => b.lastActivity - a.lastActivity);
-      setRows(enriched);
-      setLoading(false);
+      if (active) setRows(enriched);
+    }).catch(() => {
+      if (active) setLoadError('No se pudieron cargar los clientes. Revisá tu conexión e intentá de nuevo.');
+    }).finally(() => {
+      if (active) setLoading(false);
     });
-  }, []);
+    return () => {
+      active = false;
+    };
+  }, [reloadToken]);
 
   const filtered = rows.filter((c) => matchesSearch(c, search));
   const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
@@ -110,29 +122,47 @@ export default function ClientsPage() {
 
       {/* ── Filter ───────────────────────────────────────── */}
       <div className="relative flex-1 sm:max-w-[480px]">
+        <label htmlFor="clients-search" className="sr-only">
+          Buscar clientes por nombre, teléfono, email o DNI
+        </label>
         <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-[#6B6155] pointer-events-none">
           <IconSearch />
         </span>
         <input
+          id="clients-search"
           type="search"
           placeholder="Buscar por nombre, teléfono, email o DNI"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-full border border-[rgba(43,45,47,0.12)] rounded-md pl-9 pr-4 py-2.5 text-[13px] bg-white placeholder:text-[#8C8275] focus:border-[#C38A5A] focus:outline-none transition-colors"
+          className="w-full min-h-11 border border-[rgba(43,45,47,0.12)] rounded-md pl-9 pr-4 py-2.5 text-[13px] bg-white placeholder:text-[#8C8275] focus:border-[#C38A5A] focus:outline-none focus:ring-2 focus:ring-[#C38A5A]/20 transition-colors"
         />
       </div>
 
       {/* ── Loading ──────────────────────────────────────── */}
       {loading && (
-        <div className="space-y-2">
+        <div className="space-y-2" role="status" aria-live="polite">
+          <span className="sr-only">Cargando clientes…</span>
           {Array.from({ length: 5 }).map((_, i) => (
             <Skeleton key={i} className="h-16 rounded-lg" />
           ))}
         </div>
       )}
 
+      {!loading && loadError && (
+        <div className="rounded-lg border border-red-200 bg-red-50 px-5 py-4" role="alert">
+          <p className="text-[13px] text-red-800">{loadError}</p>
+          <button
+            type="button"
+            onClick={() => setReloadToken((token) => token + 1)}
+            className="mt-3 min-h-11 rounded border border-red-300 px-4 py-2 text-[11px] font-bold uppercase tracking-[0.16em] text-red-800 hover:bg-red-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-600 focus-visible:ring-offset-2"
+          >
+            Reintentar
+          </button>
+        </div>
+      )}
+
       {/* ── Table ────────────────────────────────────────── */}
-      {!loading && (
+      {!loading && !loadError && (
         <>
           {filtered.length === 0 ? (
             <EmptyState
@@ -149,7 +179,11 @@ export default function ClientsPage() {
             {/* Mobile: stacked cards */}
             <div className="sm:hidden space-y-2">
               {paginated.map((c) => (
-                <div key={c.id} onClick={() => router.push(`/clients/${encodeURIComponent(c.id)}`)} className="cursor-pointer">
+                <Link
+                  key={c.id}
+                  href={`/clients/${encodeURIComponent(c.id)}`}
+                  className="block rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A] focus-visible:ring-offset-2"
+                >
                   <Card>
                     <div className="flex items-start justify-between gap-2 mb-1">
                       <span className="font-bold text-[14px] text-[#2B2D2F] tracking-tight">{c.nombre}</span>
@@ -167,7 +201,7 @@ export default function ClientsPage() {
                       <span className="text-[12px] text-[#6B6155]">{fmtDate(c.lastActivity)}</span>
                     </div>
                   </Card>
-                </div>
+                </Link>
               ))}
             </div>
 
@@ -196,7 +230,12 @@ export default function ClientsPage() {
                       }`}
                     >
                       <td className="px-5 py-4">
-                        <span className="font-bold text-[14px] text-[#2B2D2F] tracking-tight">{c.nombre}</span>
+                        <Link
+                          href={`/clients/${encodeURIComponent(c.id)}`}
+                          className="font-bold text-[14px] text-[#2B2D2F] tracking-tight hover:text-[#C38A5A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A]"
+                        >
+                          {c.nombre}
+                        </Link>
                         {c.dni_cuit && (
                           <span className="block text-[11px] font-mono text-[#6B6155] mt-0.5">{c.dni_cuit}</span>
                         )}
@@ -234,23 +273,25 @@ export default function ClientsPage() {
                 {filtered.length} Cliente{filtered.length !== 1 ? 's' : ''}
               </span>
               <div className="flex items-center gap-4">
-                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155]">
+                <span className="text-[11px] font-bold uppercase tracking-[0.18em] text-[#6B6155]" aria-live="polite">
                   Mostrando {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, filtered.length)} de {filtered.length}
                 </span>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1" role="group" aria-label="Paginación de clientes">
                   <button
+                    type="button"
                     onClick={() => setPage((p) => Math.max(0, p - 1))}
                     disabled={page === 0}
                     aria-label="Página anterior"
-                    className="w-11 h-11 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+                    className="w-11 h-11 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A] focus-visible:ring-offset-2"
                   >
                     <IconChevronLeft />
                   </button>
                   <button
+                    type="button"
                     onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
                     disabled={page >= totalPages - 1}
                     aria-label="Página siguiente"
-                    className="w-11 h-11 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default"
+                    className="w-11 h-11 flex items-center justify-center rounded border border-[rgba(43,45,47,0.15)] text-[#6B6155] hover:border-[#C38A5A]/40 hover:text-[#C38A5A] disabled:opacity-30 transition-colors cursor-pointer disabled:cursor-default focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A] focus-visible:ring-offset-2"
                   >
                     <IconChevronRight />
                   </button>

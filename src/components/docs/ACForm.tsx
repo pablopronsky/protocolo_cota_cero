@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useDoc, offlineLockError } from '@/hooks/useDoc';
-import { setDocStatus, saveDoc, writeRevision, reopenDoc } from '@/lib/repo/projects';
+import { setDocStatus, saveDoc, reopenDoc } from '@/lib/repo/projects';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
 import { enqueueSignature, cancelQueuedSignature, getPhotoUrl } from '@/lib/photos';
 import { sequencingError } from '@/lib/sequencing';
@@ -148,7 +148,7 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
       setValue('firmaCliente.firma', cleanRef); // solo para validación en handleSign
       setFirmaClienteBlob(localBlob);
       // #22 — Congelar el contenido en el momento de la firma del cliente.
-      cancelAutosave();
+      await cancelAutosave();
       const snapshotValues = getValues();
       frozenValuesRef.current = snapshotValues;
       await persistFrozenContent(snapshotValues);
@@ -177,9 +177,28 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
   const remoteActive = !!remoteSign && remoteSign.expiresAt > Date.now();
   const remoteExpired = !!remoteSign && remoteSign.expiresAt <= Date.now();
   const [remoteBusy, setRemoteBusy] = useState(false);
-  const signUrl = remoteSign && typeof window !== 'undefined'
-    ? `${window.location.origin}/firmar/${remoteSign.token}`
-    : null;
+  const [signUrl, setSignUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!user || role !== 'admin' || !remoteActive) {
+      setSignUrl(null);
+      return;
+    }
+    let active = true;
+    void user.getIdToken()
+      .then((token) => fetch(
+        `/api/sign/request?projectCode=${encodeURIComponent(projectCode)}`,
+        { headers: { Authorization: `Bearer ${token}` }, cache: 'no-store' },
+      ))
+      .then(async (res) => {
+        if (!res.ok) return null;
+        const data = await res.json() as { url?: string };
+        return data.url ?? null;
+      })
+      .then((url) => { if (active) setSignUrl(url); })
+      .catch(() => { if (active) setSignUrl(null); });
+    return () => { active = false; };
+  }, [user, role, remoteActive, projectCode, remoteSign?.expiresAt]);
   const whatsappHref = signUrl
     ? `https://wa.me/?text=${encodeURIComponent(
         `Hola ${project.clienteNombre}! Te enviamos el acta de conformidad de tu obra para que la firmes desde el celular (te lleva 2 minutos): ${signUrl} — COTA CERO`,
@@ -196,10 +215,10 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
         body: JSON.stringify({ projectCode }),
       });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error((data as { error?: string }).error ?? failMsg);
-      }
+      const data = await res.json().catch(() => ({})) as { error?: string; url?: string };
+      if (!res.ok) throw new Error(data.error ?? failMsg);
+      if (method === 'POST') setSignUrl(data.url ?? null);
+      if (method === 'DELETE') setSignUrl(null);
       showToast(okMsg, 'success');
     } catch (e) {
       showToast(e instanceof Error ? e.message : failMsg, 'error');
@@ -273,7 +292,7 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
     if (!await openConfirm('¿Firmar el acta de conformidad? Esta acción es definitiva.')) return;
-    cancelAutosave();
+    await cancelAutosave();
     setLocking(true);
     try {
       // Usar firmas de Firestore (ya sin localBlob) para el snapshot y lock.
@@ -291,7 +310,6 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
         ...fullValues, lockedSnapshot: snapshot, lockedAt: Date.now(), lockedBy: user?.uid ?? '',
         version: (ac?.version ?? 0) + 1,
       } as Partial<AnyDoc>, project.status, { docStatus: project.docStatus, upstream });
-      await writeRevision(projectCode, 'AC', 'firmado', snapshot, (ac?.version ?? 0) + 1, user?.uid ?? '');
     } catch (e) {
       setLockErrors([e instanceof Error ? e.message : 'No se pudo firmar el acta.']);
     } finally { setLocking(false); }
@@ -300,10 +318,10 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
   // #19 — Admin puede reabrir un acta ya firmada (deja auditoría en revisions).
   async function handleReopen() {
     if (!await openConfirm('¿Reabrir el acta firmada? Volverá a "en progreso" y quedará editable.', { danger: true })) return;
+    await cancelAutosave();
     setReopening(true);
     try {
-      await reopenDoc(projectCode, 'AC', user?.uid ?? '');
-      await writeRevision(projectCode, 'AC', 'en_progreso', (ac ?? {}) as Record<string, unknown>, (ac?.version ?? 0) + 1, user?.uid ?? '');
+      await reopenDoc(projectCode, 'AC', user?.uid ?? '', (ac ?? {}) as Record<string, unknown>, (ac?.version ?? 0) + 1);
       showToast('Acta reabierta', 'success');
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'No se pudo reabrir el acta.', 'error');

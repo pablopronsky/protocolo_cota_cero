@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useDoc, offlineLockError } from '@/hooks/useDoc';
-import { setDocStatus, writeRevision, reopenDoc } from '@/lib/repo/projects';
+import { setDocStatus, reopenDoc } from '@/lib/repo/projects';
 import { sequencingError } from '@/lib/sequencing';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
 import { Section } from '@/components/docs/Section';
@@ -108,7 +108,7 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
     if (!await openConfirm('¿Marcar como completo? El documento quedará bloqueado.')) return;
-    cancelAutosave();
+    await cancelAutosave();
     setLocking(true);
     try {
       const snapshot = buildLockedSnapshot(project, upstream, { ...values, docType: 'OT' } as AnyDoc);
@@ -116,7 +116,6 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
         ...values, lockedSnapshot: snapshot, lockedAt: Date.now(), lockedBy: user?.uid ?? '',
         version: (ot?.version ?? 0) + 1,
       } as Partial<AnyDoc>, project.status, { docStatus: project.docStatus, upstream });
-      await writeRevision(projectCode, 'OT', 'completo', snapshot, (ot?.version ?? 0) + 1, user?.uid ?? '');
     } catch (e) {
       setLockErrors([e instanceof Error ? e.message : 'No se pudo bloquear el documento.']);
     } finally { setLocking(false); }
@@ -128,10 +127,10 @@ export default function OTForm({ projectCode, project, upstream, docData }: Prop
 
   async function handleReopen() {
     if (!await openConfirm('¿Reabrir este documento? Volverá a "en progreso" y quedará editable.', { danger: true })) return;
+    await cancelAutosave();
     setReopening(true);
     try {
-      await reopenDoc(projectCode, 'OT', user?.uid ?? '');
-      await writeRevision(projectCode, 'OT', 'en_progreso', (ot ?? {}) as Record<string, unknown>, (ot?.version ?? 0) + 1, user?.uid ?? '');
+      await reopenDoc(projectCode, 'OT', user?.uid ?? '', (ot ?? {}) as Record<string, unknown>, (ot?.version ?? 0) + 1);
       showToast('Documento reabierto', 'success');
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'No se pudo reabrir el documento.', 'error');

@@ -26,7 +26,7 @@ const SIZE_CLS: Record<Size, string> = {
 export function Button({ variant = 'secondary', size = 'md', className = '', ...props }: Props) {
   return (
     <button
-      className={`inline-flex items-center justify-center gap-1.5 font-bold uppercase tracking-[0.18em] rounded transition-colors duration-150 disabled:opacity-50 disabled:pointer-events-none cursor-pointer ${VARIANT_CLS[variant]} ${SIZE_CLS[size]} ${className}`}
+      className={`inline-flex items-center justify-center gap-1.5 font-bold uppercase tracking-[0.18em] rounded transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A] focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none cursor-pointer ${VARIANT_CLS[variant]} ${SIZE_CLS[size]} ${className}`}
       {...props}
     />
   );

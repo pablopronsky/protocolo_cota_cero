@@ -59,6 +59,6 @@ for (const u of USERS) {
 }
 
 console.log('\n✅ Listo. Usuarios inicializados.');
-console.log('\n⚠️  Contraseñas generadas (distribuir de forma segura y pedir cambio en primer login):');
-for (const u of USERS) console.log(`   ${u.email}  →  ${u.password}`);
+console.log('\nUsuarios inicializados sin exponer credenciales en stdout.');
+console.log('Cada usuario debe usar "Olvide mi contrasena" en /login para establecer su acceso inicial.');
 process.exit(0);

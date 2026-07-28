@@ -32,7 +32,7 @@ export default function DocEditorPage({
   const docType = rawDocType as DocType;
   const stepNum = DOC_ORDER.indexOf(docType) + 1;
 
-  const { project, docs, loading } = useProject(code);
+  const { project, docs, loading, error } = useProject(code);
 
   if (loading) {
     return (
@@ -47,6 +47,7 @@ export default function DocEditorPage({
       </div>
     );
   }
+  if (error) return <p role="alert" className="text-sm text-red-500">{error} Recargá la página para volver a intentar.</p>;
   if (!project) return <p className="text-sm text-red-500">Proyecto no encontrado.</p>;
   if (!VALID_DOC_TYPES.includes(docType)) return <p className="text-sm text-red-500">Tipo de documento inválido.</p>;
 
@@ -114,12 +115,12 @@ export default function DocEditorPage({
         )}
       </div>
 
-      {docType === 'VT' && <VTForm {...commonProps} />}
-      {docType === 'EP' && <EPForm {...commonProps} />}
-      {docType === 'OT' && <OTForm {...commonProps} />}
-      {docType === 'RF' && <RFForm {...commonProps} />}
-      {docType === 'AC' && <ACForm {...commonProps} />}
-      {docType === 'FM' && <FMForm {...commonProps} />}
+      {docType === 'VT' && <VTForm key={code} {...commonProps} />}
+      {docType === 'EP' && <EPForm key={code} {...commonProps} />}
+      {docType === 'OT' && <OTForm key={code} {...commonProps} />}
+      {docType === 'RF' && <RFForm key={code} {...commonProps} />}
+      {docType === 'AC' && <ACForm key={code} {...commonProps} />}
+      {docType === 'FM' && <FMForm key={code} {...commonProps} />}
     </div>
   );
 }

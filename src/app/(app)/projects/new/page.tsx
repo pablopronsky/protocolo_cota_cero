@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense, FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Link from 'next/link';
 import { useAuth } from '@/hooks/useAuth';
 import { useUsers } from '@/hooks/useUsers';
 import { listClients } from '@/lib/repo/clients';
@@ -280,9 +281,9 @@ function NewProjectForm() {
   return (
     <div className="space-y-5 pb-10">
       <div>
-        <a href="/projects" className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#6B6155] hover:text-[#C38A5A] transition-colors">
+        <Link href="/projects" className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#6B6155] hover:text-[#C38A5A] transition-colors">
           ← Proyectos
-        </a>
+        </Link>
         <h1 className="text-xl font-bold text-[#2B2D2F] mt-1.5">Nuevo proyecto</h1>
       </div>
 

@@ -24,7 +24,10 @@ export function GlobalSearch() {
   const [query, setQuery] = useState('');
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [clients, setClients] = useState<Client[] | null>(null);
+  const [loadError, setLoadError] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const loadingRef = useRef(false);
 
   useEffect(() => {
     function onClickOutside(e: MouseEvent) {
@@ -35,8 +38,20 @@ export function GlobalSearch() {
   }, []);
 
   function ensureLoaded() {
-    if (projects === null) listAllProjects().then(setProjects);
-    if (clients === null) listClients().then(setClients);
+    if (loadingRef.current || (projects !== null && clients !== null)) return;
+    loadingRef.current = true;
+    setLoadError('');
+    Promise.all([listAllProjects(), listClients()])
+      .then(([nextProjects, nextClients]) => {
+        setProjects(nextProjects);
+        setClients(nextClients);
+      })
+      .catch(() => {
+        setLoadError('No se pudo cargar la búsqueda. Revisá tu conexión e intentá de nuevo.');
+      })
+      .finally(() => {
+        loadingRef.current = false;
+      });
   }
 
   const q = query.trim().toLowerCase();
@@ -64,26 +79,73 @@ export function GlobalSearch() {
   }
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className="relative w-full" role="search">
+      <label htmlFor="global-search" className="sr-only">
+        Buscar proyecto o cliente
+      </label>
       <input
+        ref={inputRef}
+        role="combobox"
+        id="global-search"
         type="search"
         placeholder="Buscar proyecto o cliente…"
         value={query}
         onFocus={() => { ensureLoaded(); setOpen(true); }}
         onChange={(e) => { setQuery(e.target.value); ensureLoaded(); setOpen(true); }}
-        className="w-full border border-[rgba(43,45,47,0.15)] rounded-md px-3 py-1.5 text-[12px] bg-white placeholder:text-[#8C8275] focus:border-[#C38A5A] focus:outline-none transition-colors"
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            setOpen(false);
+            e.currentTarget.select();
+          } else if (e.key === 'ArrowDown' && open && q) {
+            const firstResult = containerRef.current?.querySelector<HTMLButtonElement>('[data-search-result], [data-search-retry]');
+            if (firstResult) {
+              e.preventDefault();
+              firstResult.focus();
+            }
+          }
+        }}
+        aria-controls={open && q ? 'global-search-results' : undefined}
+        aria-expanded={open && Boolean(q)}
+        className="w-full border border-[rgba(43,45,47,0.15)] rounded-md px-3 py-2 min-h-11 text-[12px] bg-white placeholder:text-[#8C8275] focus:border-[#C38A5A] focus:outline-none focus:ring-2 focus:ring-[#C38A5A]/20 transition-colors"
       />
       {open && q && (
-        <div className="absolute left-0 right-0 mt-1 bg-white border border-[rgba(43,45,47,0.12)] rounded-lg shadow-lg overflow-hidden z-50 max-h-80 overflow-y-auto">
-          {results.length === 0 ? (
-            <p className="px-4 py-3 text-[12px] text-[#6B6155]">Sin resultados.</p>
+        <div
+          id="global-search-results"
+          className="absolute left-0 right-0 mt-1 bg-white border border-[rgba(43,45,47,0.12)] rounded-lg shadow-lg overflow-hidden z-50 max-h-80 overflow-y-auto"
+          aria-label="Resultados de búsqueda"
+        >
+          {loadError ? (
+            <div className="px-4 py-3" role="alert">
+              <p className="text-[12px] leading-relaxed text-red-700">{loadError}</p>
+              <button
+                type="button"
+                data-search-retry
+                onClick={ensureLoaded}
+                className="mt-2 min-h-11 text-[11px] font-bold uppercase tracking-[0.16em] text-[#2B2D2F] hover:text-[#C38A5A] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#C38A5A] focus-visible:ring-offset-2"
+              >
+                Reintentar
+              </button>
+            </div>
+          ) : projects === null || clients === null ? (
+            <p className="px-4 py-3 text-[12px] text-[#6B6155]" role="status">
+              Buscando…
+            </p>
+          ) : results.length === 0 ? (
+            <p className="px-4 py-3 text-[12px] text-[#6B6155]" role="status">Sin resultados.</p>
           ) : (
             results.map((r) => (
               <button
                 key={`${r.type}-${r.id}`}
                 type="button"
+                data-search-result
                 onClick={() => go(r.href)}
-                className="w-full text-left px-4 py-2.5 hover:bg-[#F5F2ED] transition-colors border-b border-[rgba(43,45,47,0.06)] last:border-b-0"
+                onKeyDown={(e) => {
+                  if (e.key === 'Escape') {
+                    setOpen(false);
+                    inputRef.current?.focus();
+                  }
+                }}
+                className="w-full min-h-11 text-left px-4 py-2.5 hover:bg-[#F5F2ED] transition-colors border-b border-[rgba(43,45,47,0.06)] last:border-b-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-[#C38A5A]"
               >
                 <p className="text-[13px] font-semibold text-[#2B2D2F]">{r.title}</p>
                 <p className="text-[11px] text-[#6B6155]">{r.type === 'project' ? 'Proyecto' : 'Cliente'} · {r.subtitle}</p>

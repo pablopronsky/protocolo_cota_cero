@@ -18,8 +18,13 @@ export default function SaveIndicator({ state }: Props) {
   const { text, dot } = map[state];
 
   return (
-    <span className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold uppercase tracking-[0.16em] text-[#6B6155]">
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
+    <span
+      className="inline-flex items-center gap-1.5 text-[11px] font-mono font-bold uppercase tracking-[0.16em] text-[#6B6155]"
+      role={state === 'error' || state === 'denied' ? 'alert' : 'status'}
+      aria-live={state === 'error' || state === 'denied' ? 'assertive' : 'polite'}
+      aria-atomic="true"
+    >
+      <span aria-hidden="true" className={`w-1.5 h-1.5 rounded-full shrink-0 ${dot}`} />
       {text}
     </span>
   );

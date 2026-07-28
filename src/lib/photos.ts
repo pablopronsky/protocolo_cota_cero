@@ -1,6 +1,6 @@
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
-import { getFirebaseStorage, getFirebaseDb } from './firebase/client';
+import { getFirebaseAuth, getFirebaseStorage, getFirebaseDb } from './firebase/client';
 import type { PhotoRef, ProjectCode, DocType } from '@/schemas';
 
 // #23 — La cola offline vive en IndexedDB (no localStorage): guarda los Blobs
@@ -26,6 +26,14 @@ interface QueueEntry {
 // ── Compresión ───────────────────────────────────────────
 const MAX_DIM = 1600;       // lado máximo en px
 const JPEG_QUALITY = 0.7;
+
+function auditFields(): { updatedAt: number; updatedBy: string } {
+  const uid = getFirebaseAuth().currentUser?.uid;
+  if (!uid) {
+    throw new Error('La sesión venció. Volvé a iniciar sesión antes de guardar archivos.');
+  }
+  return { updatedAt: Date.now(), updatedBy: uid };
+}
 
 // Redimensiona y recodifica a JPEG. Si algo falla (formato raro, sin canvas),
 // cae al archivo original para no bloquear la captura.
@@ -132,6 +140,7 @@ export async function enqueuePhoto(
   const db = getFirebaseDb();
   await updateDoc(doc(db, 'projects', projectCode, 'documents', docType), {
     registroFotografico: arrayUnion(cleanRef),
+    ...auditFields(),
   });
 
   if (typeof navigator !== 'undefined' && navigator.onLine) void flushPhotoQueue();
@@ -170,6 +179,7 @@ export async function enqueueSignature(
   const db = getFirebaseDb();
   await updateDoc(doc(db, 'projects', projectCode, 'documents', 'AC'), {
     [signatureField]: cleanRef,
+    ...auditFields(),
   });
 
   if (typeof navigator !== 'undefined' && navigator.onLine) void flushPhotoQueue();
@@ -187,6 +197,7 @@ export async function removePhotoFromDoc(
   const db = getFirebaseDb();
   await updateDoc(doc(db, 'projects', projectCode, 'documents', docType), {
     registroFotografico: arrayRemove(photoRef),
+    ...auditFields(),
   });
 
   if (photoRef.pending) {
@@ -256,11 +267,20 @@ export async function flushPhotoQueue(): Promise<void> {
 
       if (entry.signatureField) {
         // Firma escalar: reemplazar el campo directamente
-        await updateDoc(docRef, { [entry.signatureField]: uploaded });
+        await updateDoc(docRef, {
+          [entry.signatureField]: uploaded,
+          ...auditFields(),
+        });
       } else {
         // Array de fotos: quitar la pendiente y agregar la subida
-        await updateDoc(docRef, { registroFotografico: arrayRemove(entry.photoRef) });
-        await updateDoc(docRef, { registroFotografico: arrayUnion(uploaded) });
+        await updateDoc(docRef, {
+          registroFotografico: arrayRemove(entry.photoRef),
+          ...auditFields(),
+        });
+        await updateDoc(docRef, {
+          registroFotografico: arrayUnion(uploaded),
+          ...auditFields(),
+        });
       }
 
       await idbDelete(entry.entryId);

@@ -190,7 +190,7 @@ export interface DocAC extends DocBase {
   // Mirror de la solicitud de firma remota activa (si hay). Lo mantiene el
   // server (/api/sign): el form la muestra sin lecturas extra y desaparece al
   // firmarse o cancelarse.
-  remoteSign?: { token: string; createdAt: Millis; expiresAt: Millis } | null;
+  remoteSign?: { createdAt: Millis; expiresAt: Millis } | null;
 }
 
 // ── Firma remota del acta ─────────────────────────────────
@@ -307,21 +307,22 @@ export const FM_DEFAULTS_BY_TIPO: Record<TipoMaterial, FMDefaults> = {
     precauciones: ['no_arrastrar_muebles', 'no_usar_abrasivos', 'evitar_puntos_calor'],
     frecuenciaLimpieza: 'segun_uso',
     productosAptos: [
-      'Agua con detergente neutro',
-      'Limpiador para pisos vinílicos / SPC',
-      'Paño de microfibra',
+      'Limpiador neutro pH 7, diluido según indicación',
+      'Limpiador específico para pisos vinílicos o SPC',
+      'Mopa o paño de microfibra bien escurrido',
     ],
     productosNoAptos: [
       'Solventes (acetona, thinner)',
-      'Abrasivos fuertes',
-      'Limpiadores con amoniaco',
-      'Disolventes',
+      'Máquina de vapor',
+      'Polvos, esponjas o cepillos abrasivos',
+      'Lavandina o amoníaco concentrados',
+      'Ceras, aceites y productos que dejan película',
     ],
     recomendaciones:
-      'El SPC es resistente al agua pero no sumergible: evitar agua estancada prolongada en juntas. ' +
-      'Proteger patas de muebles con feltros o topes de goma. ' +
-      'No usar cortafrío ni herramientas cortantes cerca de las juntas. ' +
-      'Evitar exposición directa y prolongada al sol sin protección UV (puede blanquear el color).',
+      'El SPC es resistente al agua, pero no sumergible: evitá agua estancada durante períodos prolongados. ' +
+      'Protegé las patas de los muebles con fieltros y levantá las piezas pesadas para moverlas. ' +
+      'No uses herramientas filosas cerca de las juntas. ' +
+      'Evitá calor intenso y exposición solar directa prolongada sin protección.',
   },
   madera: {
     usoRecomendado: ['trafico_moderado', 'evitar_agua_estancada', 'alfombras_antihumedad', 'protectores_muebles', 'temperatura_estable'],

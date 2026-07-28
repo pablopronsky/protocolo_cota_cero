@@ -128,10 +128,10 @@ describe('AC sequencing', () => {
     expect(error).toContain('RF');
   });
 
-  it('no RF upstream → sign AC is allowed (no upstream = assume ok, rule enforces at DB level)', () => {
-    // sequencingError is permissive when upstream doc is absent — the rule check
-    // at the Firestore layer handles it. This documents the current behavior.
-    expect(sequencingError('AC', 'firmado', rfCompleto, {})).toBeNull();
+  it('fails closed when RF upstream is missing', () => {
+    const error = sequencingError('AC', 'firmado', rfCompleto, {});
+    expect(error).not.toBeNull();
+    expect(error).toContain('RF');
   });
 });
 

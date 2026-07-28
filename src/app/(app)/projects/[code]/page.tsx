@@ -5,10 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useProject } from '@/hooks/useProject';
 import { useAuth } from '@/hooks/useAuth';
-import { archiveProject, unarchiveProject } from '@/lib/repo/projects';
+import { archiveProject, unarchiveProject, updateProjectMaterial } from '@/lib/repo/projects';
 import { useConfirm } from '@/hooks/useConfirm';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
-import type { DocType, DocStatus } from '@/schemas';
+import type { DocType, DocStatus, Project } from '@/schemas';
 import { DOC_ORDER, DOC_LABELS } from '@/schemas';
 
 const STATUS_CONFIG: Record<DocStatus, {
@@ -74,12 +74,18 @@ export default function ProjectOverviewPage({
   params: Promise<{ code: string }>;
 }) {
   const { code } = use(params);
-  const { project, docs, loading } = useProject(code);
+  const { project, docs, loading, error } = useProject(code);
   const { role, user } = useAuth();
   const router = useRouter();
   const { confirmOpen, confirmMessage, confirmDanger, openConfirm, onConfirm, onCancel } = useConfirm();
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [duplicating, setDuplicating] = useState(false);
+  const [editingMaterial, setEditingMaterial] = useState(false);
+  const [savingMaterial, setSavingMaterial] = useState(false);
+  const [materialTipo, setMaterialTipo] = useState<Project['materialInstalado']['tipo'] | ''>('');
+  const [materialDescripcion, setMaterialDescripcion] = useState('');
+  const [materialM2, setMaterialM2] = useState('');
 
   if (loading) {
     return (
@@ -89,6 +95,10 @@ export default function ProjectOverviewPage({
         </span>
       </div>
     );
+  }
+
+  if (error) {
+    return <p role="alert" className="text-sm text-red-500">{error} Recargá la página para volver a intentar.</p>;
   }
 
   if (!project) {
@@ -134,6 +144,45 @@ export default function ProjectOverviewPage({
       setActionError('No se pudo duplicar el proyecto.');
     } finally {
       setDuplicating(false);
+    }
+  }
+
+  function startEditingMaterial() {
+    if (!project) return;
+    setMaterialTipo(project.materialInstalado.tipo);
+    setMaterialDescripcion(project.materialInstalado.descripcion);
+    setMaterialM2(project.materialInstalado.m2Estimados?.toString() ?? '');
+    setActionError(null);
+    setActionSuccess(null);
+    setEditingMaterial(true);
+  }
+
+  async function handleSaveMaterial() {
+    if (!project || !materialTipo || !materialDescripcion.trim()) {
+      setActionError('Completá el tipo y la descripción del material.');
+      return;
+    }
+    const parsedM2 = materialM2.trim() ? Number(materialM2.replace(',', '.')) : undefined;
+    if (parsedM2 !== undefined && (!Number.isFinite(parsedM2) || parsedM2 <= 0)) {
+      setActionError('Ingresá una superficie válida.');
+      return;
+    }
+
+    setSavingMaterial(true);
+    setActionError(null);
+    setActionSuccess(null);
+    try {
+      await updateProjectMaterial(project.code, {
+        tipo: materialTipo,
+        descripcion: materialDescripcion.trim(),
+        ...(parsedM2 !== undefined ? { m2Estimados: parsedM2 } : {}),
+      });
+      setEditingMaterial(false);
+      setActionSuccess('Material actualizado. La ficha de mantenimiento usará estos datos.');
+    } catch (error) {
+      setActionError(error instanceof Error ? error.message : 'No se pudo actualizar el material.');
+    } finally {
+      setSavingMaterial(false);
     }
   }
 
@@ -191,6 +240,12 @@ export default function ProjectOverviewPage({
       {actionError && (
         <div className="border border-red-300/50 bg-red-50 rounded-md px-4 py-3 text-[13px] text-red-500">
           {actionError}
+        </div>
+      )}
+
+      {actionSuccess && (
+        <div className="border border-emerald-700/20 bg-emerald-50 rounded-md px-4 py-3 text-[13px] text-emerald-800">
+          {actionSuccess}
         </div>
       )}
 
@@ -263,36 +318,109 @@ export default function ProjectOverviewPage({
 
       {/* Material */}
       <div className="bg-white border border-[rgba(43,45,47,0.08)] rounded-lg overflow-hidden">
-        <div className="px-4 py-2.5 border-b border-[rgba(43,45,47,0.06)]">
+        <div className="px-4 py-2.5 border-b border-[rgba(43,45,47,0.06)] flex items-center justify-between gap-3">
           <p className="eyebrow text-[10px]">Material a instalar</p>
+          {role === 'admin' && !isArchived && !editingMaterial && (
+            <button
+              type="button"
+              onClick={startEditingMaterial}
+              className="text-[10px] font-bold uppercase tracking-[0.18em] text-[#8F5B33] hover:text-[#C38A5A] transition-colors"
+            >
+              Editar material
+            </button>
+          )}
         </div>
-        <div className="px-4 py-3">
-          <p className="text-[13px] font-semibold text-[#2B2D2F] capitalize">
-            {project.materialInstalado.tipo} · {project.materialInstalado.descripcion}
-          </p>
-          {project.materialInstalado.m2Estimados && (
-            <p className="text-[12px] font-mono text-[#6B6155] mt-1">
-              {project.materialInstalado.m2Estimados} m²
-            </p>
+        <div className="px-4 py-3.5">
+          {editingMaterial ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-1 sm:grid-cols-[0.8fr_1.8fr_0.7fr] gap-3">
+                <label className="block">
+                  <span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-[#6B6155] mb-1.5">Tipo</span>
+                  <select
+                    value={materialTipo}
+                    onChange={(event) => setMaterialTipo(event.target.value as Project['materialInstalado']['tipo'])}
+                    className="field-input w-full"
+                  >
+                    <option value="laminado">Laminado</option>
+                    <option value="spc">SPC</option>
+                    <option value="madera">Madera</option>
+                    <option value="deck">Deck</option>
+                    <option value="revestimiento">Revestimiento</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-[#6B6155] mb-1.5">Marca, modelo o especificación</span>
+                  <input
+                    value={materialDescripcion}
+                    onChange={(event) => setMaterialDescripcion(event.target.value)}
+                    className="field-input w-full"
+                    placeholder="Ej.: SPC 5 mm · capa de uso 0,5 mm"
+                  />
+                </label>
+                <label className="block">
+                  <span className="block text-[11px] font-bold uppercase tracking-[0.14em] text-[#6B6155] mb-1.5">Superficie m²</span>
+                  <input
+                    value={materialM2}
+                    onChange={(event) => setMaterialM2(event.target.value)}
+                    className="field-input w-full"
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0,00"
+                  />
+                </label>
+              </div>
+              <p className="text-[11px] leading-relaxed text-[#6B6155]">
+                Este dato aparece en la portada, el legajo y la ficha de mantenimiento.
+              </p>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingMaterial(false)}
+                  disabled={savingMaterial}
+                  className="px-3 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#6B6155] border border-[rgba(43,45,47,0.14)] rounded-md disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveMaterial}
+                  disabled={savingMaterial}
+                  className="px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white bg-[#C38A5A] rounded-md disabled:opacity-50"
+                >
+                  {savingMaterial ? 'Guardando…' : 'Guardar cambios'}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <p className="text-[13px] font-semibold text-[#2B2D2F]">
+                  <span className="uppercase">{project.materialInstalado.tipo}</span>
+                  <span className="text-[#C38A5A] mx-2">·</span>
+                  {project.materialInstalado.descripcion}
+                </p>
+                <p className="text-[11px] text-[#6B6155] mt-1">Especificación vigente para la obra</p>
+              </div>
+              {project.materialInstalado.m2Estimados && (
+                <p className="text-[12px] font-mono font-bold text-[#6B6155] shrink-0">
+                  {project.materialInstalado.m2Estimados.toLocaleString('es-AR')} m²
+                </p>
+              )}
+            </div>
           )}
         </div>
       </div>
 
       {/* Entregable cliente PDF */}
-      {project.docStatus?.AC === 'firmado' ? (
-        <Link
-          href={`/print/${project.code}/entregable`}
-          target="_blank"
-          className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] rounded-md py-3 text-white transition-colors"
-          style={{ background: '#C38A5A' }}
-        >
-          Entregable cliente · PDF
-        </Link>
-      ) : (
-        <div className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] rounded-md py-3 text-[#6B6155]" style={{ background: '#f5f2ed' }}>
-          Disponible al firmar el acta
-        </div>
-      )}
+      <Link
+        href={`/print/${project.code}/entregable`}
+        target="_blank"
+        className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] rounded-md py-3 text-white transition-colors"
+        style={{ background: '#C38A5A' }}
+      >
+        Entregable cliente · PDF
+      </Link>
 
       {/* Legajo PDF */}
       <Link

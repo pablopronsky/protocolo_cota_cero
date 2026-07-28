@@ -113,7 +113,11 @@ export default function LoginPage() {
       const auth = getFirebaseAuth();
       await setPersistence(auth, remember ? browserLocalPersistence : browserSessionPersistence);
       await login(email, password);
-      router.replace('/projects');
+      const requestedPath = new URLSearchParams(window.location.search).get('next');
+      const destination = requestedPath?.startsWith('/') && !requestedPath.startsWith('//')
+        ? requestedPath
+        : '/projects';
+      router.replace(destination);
     } catch {
       setError('Email o contraseña incorrectos.');
     } finally {
@@ -130,14 +134,13 @@ export default function LoginPage() {
     try {
       const auth = getFirebaseAuth();
       await sendPasswordResetEmail(auth, forgotEmail);
-      setForgotSuccess(true);
-      setForgotEmail('');
-      setTimeout(() => setForgotMode(false), 3000);
     } catch {
-      setError('No encontramos una cuenta con ese email.');
-    } finally {
-      setForgotLoading(false);
+      // Respuesta indistinguible: no revelar si una cuenta existe.
     }
+    setForgotSuccess(true);
+    setForgotEmail('');
+    setTimeout(() => setForgotMode(false), 3000);
+    setForgotLoading(false);
   }
 
   function resetForgot() {

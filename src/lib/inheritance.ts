@@ -1,5 +1,5 @@
 import type {
-  Project, DocType, DocVT, DocEP, DocOT, DocRF, DocAC, DocFM,
+  Project, DocType, DocVT, DocEP, DocOT,
   AnyDoc, Inherited,
 } from '@/schemas';
 

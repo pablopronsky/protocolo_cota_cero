@@ -1,7 +1,7 @@
 import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import { getAuth, signInWithEmailAndPassword, connectAuthEmulator } from 'firebase/auth';
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
 import {
-  getFirestore, connectFirestoreEmulator, doc, setDoc, collection,
+  getFirestore, connectFirestoreEmulator, doc, setDoc,
 } from 'firebase/firestore';
 import type { Page } from '@playwright/test';
 

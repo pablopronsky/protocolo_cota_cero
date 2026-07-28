@@ -2,10 +2,12 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{db}/documents {
 
-    function signedIn()  { return request.auth != null; }
-    function role()      { return request.auth.token.role; }
-    function isAdmin()   { return role() == 'admin'; }
-    function isTecnico() { return role() == 'tecnico'; }
+    function signedIn()  {
+      return request.auth != null
+          && request.auth.token.role in ['admin', 'tecnico'];
+    }
+    function isAdmin()   { return signedIn() && request.auth.token.role == 'admin'; }
+    function isTecnico() { return signedIn() && request.auth.token.role == 'tecnico'; }
     function locked(d)   { return d.status == 'completo' || d.status == 'firmado'; }
 
     // #19 — El admin puede reabrir un doc bloqueado, pero SOLO como transición
@@ -14,8 +16,48 @@ service cloud.firestore {
     function isReopen(before, after) {
       return locked(before)
           && after.status == 'en_progreso'
-          && after.diff(before).affectedKeys()
-               .hasOnly(['status','updatedAt','updatedBy','reopenedAt','reopenedBy']);
+          && after.updatedBy == request.auth.uid
+          && after.reopenedBy == request.auth.uid
+          && after.updatedAt is int
+          && after.reopenedAt is int
+          && after.updatedAt >= before.updatedAt
+          && after.lockedSnapshot == null
+          && after.lockedAt == null
+          && after.lockedBy == null
+          && after.version == before.version + 1
+          && after.diff(before).affectedKeys().hasOnly([
+               'status', 'updatedAt', 'updatedBy', 'reopenedAt', 'reopenedBy',
+               'lockedSnapshot', 'lockedAt', 'lockedBy', 'version'
+             ]);
+    }
+
+    function validDocIdentity(before, after, code, docType) {
+      return before.docType == docType
+          && after.docType == docType
+          && before.projectCode == code
+          && after.projectCode == code
+          && after.createdAt == before.createdAt;
+    }
+
+    function validNormalDocUpdate(before, after) {
+      return !locked(before)
+          && after.status in ['vacio', 'en_progreso', 'completo', 'firmado']
+          && after.updatedBy == request.auth.uid
+          && after.updatedAt is int
+          && before.updatedAt is int
+          && after.updatedAt >= before.updatedAt
+          && before.version is int
+          && after.version is int
+          && ((locked(after)
+                && after.version == before.version + 1
+                && after.lockedSnapshot is map
+                && after.lockedAt is int
+                && after.lockedBy == request.auth.uid)
+              || (!locked(after)
+                && after.version == before.version
+                && after.lockedSnapshot == before.lockedSnapshot
+                && after.lockedAt == before.lockedAt
+                && after.lockedBy == before.lockedBy));
     }
 
     // #7 — Valida que todos los valores del mapa docStatus estén en el enum.
@@ -140,28 +182,40 @@ service cloud.firestore {
         // Técnico: solo VT, EP, OT, RF.
         // (#5 reglas) AC y FM son exclusivos del admin, coherente con el
         //             guard de UI en ACForm (Batch 3).
-        allow write: if !projectArchived(code)
-                     && ((isAdmin()
-                          && (resource == null
-                              || !locked(resource.data)
-                              || isReopen(resource.data, request.resource.data))
-                          // #21 — no puede cerrar fuera de secuencia (delete: request.resource == null).
-                          && (request.resource == null
-                              || secuenciaOk(code, docType, request.resource.data.status)))
-                     || (isTecnico()
-                          && docType in ['VT','EP','OT','RF']
-                          && (resource == null || !locked(resource.data))
-                          // #7 — status del documento también debe ser del enum.
-                          && request.resource.data.status
-                               in ['vacio','en_progreso','completo','firmado']
-                          // #21 — no puede cerrar fuera de secuencia.
-                          && secuenciaOk(code, docType, request.resource.data.status)));
+        // Los documentos base nacen por Admin SDK. El cliente solo actualiza
+        // documentos existentes; no puede crear IDs alternativos ni borrarlos.
+        allow create, delete: if false;
+        allow update: if !projectArchived(code)
+                      && validDocIdentity(resource.data, request.resource.data, code, docType)
+                      && ((isAdmin()
+                           && (isReopen(resource.data, request.resource.data)
+                               || (validNormalDocUpdate(resource.data, request.resource.data)
+                                   && secuenciaOk(code, docType,
+                                                  request.resource.data.status))))
+                          || (isTecnico()
+                           && docType in ['VT', 'EP', 'OT', 'RF']
+                           && validNormalDocUpdate(resource.data, request.resource.data)
+                           && secuenciaOk(code, docType, request.resource.data.status)));
       }
 
       match /revisions/{rev} {
         allow read:           if signedIn();
         // #10 — by debe ser el uid del autor; at debe ser el timestamp del servidor.
         allow create:         if signedIn()
+                                 && request.resource.data.keys().hasAll([
+                                      'docType', 'projectCode', 'action', 'snapshot',
+                                      'version', 'by', 'at'
+                                    ])
+                                 && request.resource.data.keys().hasOnly([
+                                      'docType', 'projectCode', 'action', 'snapshot',
+                                      'version', 'by', 'at'
+                                    ])
+                                 && request.resource.data.docType in ['VT','EP','OT','RF','AC','FM']
+                                 && request.resource.data.projectCode == code
+                                 && request.resource.data.action in ['vacio','en_progreso','completo','firmado']
+                                 && request.resource.data.snapshot is map
+                                 && request.resource.data.version is int
+                                 && request.resource.data.version >= 0
                                  && request.resource.data.by == request.auth.uid
                                  && request.resource.data.at == request.time;
         allow update, delete: if false;

@@ -1,11 +1,29 @@
 rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    match /projects/{code}/{allPaths=**} {
-      allow read:  if request.auth != null;
-      allow write: if request.auth != null
-                   && request.auth.token.role in ['admin', 'tecnico']
-                   && request.resource.size < 10 * 1024 * 1024 // 10MB máx por foto
+    function hasAppRole() {
+      return request.auth != null
+          && request.auth.token.role in ['admin', 'tecnico'];
+    }
+
+    function canWriteDoc(docType) {
+      return request.auth.token.role == 'admin'
+          || (request.auth.token.role == 'tecnico'
+              && docType in ['VT', 'EP', 'OT', 'RF']);
+    }
+
+    match /projects/{code}/{docType}/{fileName} {
+      allow read: if hasAppRole()
+                  && code.matches('COTA-[0-9]{4}-[0-9]{4}')
+                  && docType in ['VT', 'EP', 'OT', 'RF', 'AC', 'FM']
+                  && fileName.matches('[A-Za-z0-9_-]{1,64}[.](jpg|jpeg|png|webp)');
+      allow write: if hasAppRole()
+                   && canWriteDoc(docType)
+                   && code.matches('COTA-[0-9]{4}-[0-9]{4}')
+                   && docType in ['VT', 'EP', 'OT', 'RF', 'AC', 'FM']
+                   && fileName.matches('[A-Za-z0-9_-]{1,64}[.](jpg|jpeg|png|webp)')
+                   && request.resource != null
+                   && request.resource.size < 10 * 1024 * 1024
                    && request.resource.contentType.matches('image/(jpeg|png|webp)');
     }
   }

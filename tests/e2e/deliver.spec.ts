@@ -2,7 +2,7 @@
  * E2E: Deliver (entregar) flow
  *
  * Tests that:
- *  - Entregable PDF is only available after AC is firmado
+ *  - Entregable PDF is available without requiring AC signature
  *  - Project status can be advanced to "entregado"
  *  - WhatsApp / share button becomes visible
  *
@@ -14,18 +14,18 @@ import { doc, setDoc } from 'firebase/firestore';
 
 const TEST_PROJECT = 'P-E2E-DELIVER';
 
-async function seedSignedProject(projectCode: string) {
+async function seedProjectWithoutSignedAc(projectCode: string) {
   await seedTestProject(projectCode);
   await advanceToReadyForSignoff(projectCode);
 
-  // Mark AC as firmado to simulate completed sign-off
+  // Keep the AC in progress: the client deliverable must not require a signature.
   const db = getTestDb();
   await setDoc(
     doc(db, 'projects', projectCode, 'documents', 'AC'),
     {
       docType: 'AC',
       projectCode,
-      status: 'firmado',
+      status: 'en_progreso',
       lockedSnapshot: { fechaActa: '2025-01-20', conformidad: 'conforme' },
       lockedAt: Date.now(),
       lockedBy: 'admin-uid',
@@ -47,7 +47,7 @@ async function seedSignedProject(projectCode: string) {
       status: 'en_curso',
       docStatus: {
         VT: 'completo', EP: 'completo', OT: 'completo',
-        RF: 'completo', AC: 'firmado', FM: 'vacio',
+        RF: 'completo', AC: 'en_progreso', FM: 'vacio',
       },
       updatedAt: Date.now(),
       updatedBy: 'admin-uid',
@@ -56,13 +56,27 @@ async function seedSignedProject(projectCode: string) {
   );
 }
 
+async function markAcSigned(projectCode: string) {
+  const db = getTestDb();
+  await setDoc(
+    doc(db, 'projects', projectCode, 'documents', 'AC'),
+    { status: 'firmado' },
+    { merge: true },
+  );
+  await setDoc(
+    doc(db, 'projects', projectCode),
+    { docStatus: { AC: 'firmado' } },
+    { merge: true },
+  );
+}
+
 test.describe('Deliver (entregar) flow', () => {
   test.beforeEach(async ({ page }) => {
-    await seedSignedProject(TEST_PROJECT);
+    await seedProjectWithoutSignedAc(TEST_PROJECT);
     await signInAsAdmin(page);
   });
 
-  test('entregable PDF option is visible when AC is firmado', async ({ page }) => {
+  test('entregable PDF option is visible without AC signature', async ({ page }) => {
     await page.goto(`/projects/${TEST_PROJECT}`);
     // The PrintEntregable or share button should be visible
     const entregableButton = page.getByRole('link', { name: /entregable|pdf/i })
@@ -70,22 +84,17 @@ test.describe('Deliver (entregar) flow', () => {
     await expect(entregableButton.first()).toBeVisible({ timeout: 10_000 });
   });
 
-  test('project page shows AC as firmado', async ({ page }) => {
-    await page.goto(`/projects/${TEST_PROJECT}`);
-    // Should see "firmado" badge somewhere on the project page
-    await expect(page.getByText(/firmado/i).first()).toBeVisible({ timeout: 10_000 });
-  });
-
-  test('entregable PDF does not include draft content', async ({ page }) => {
+  test('entregable PDF renders without a signed AC', async ({ page }) => {
     // Navigate to the entregable print URL if it exists
     await page.goto(`/projects/${TEST_PROJECT}/print/entregable`);
-    // Should show the signed acta content, not draft state
+    // Should show the entered acta content even without a signature.
     await expect(page.getByText(/conforme/i)).toBeVisible({ timeout: 10_000 });
     // Should NOT show the raw "vacio" placeholder
     await expect(page.getByText(/vacio/i)).not.toBeVisible();
   });
 
   test('admin can mark project as entregado after firmado AC', async ({ page }) => {
+    await markAcSigned(TEST_PROJECT);
     await page.goto(`/projects/${TEST_PROJECT}`);
     const entregarButton = page.getByRole('button', { name: /entregar|marcar entregado/i });
     if (await entregarButton.isVisible({ timeout: 5_000 })) {

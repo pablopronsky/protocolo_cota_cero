@@ -1,19 +1,19 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Logo from '@/components/Logo';
 import { getProject, getAllDocs } from '@/lib/repo/projects';
 import { useAuth } from '@/hooks/useAuth';
 import { buildLockedSnapshot } from '@/lib/inheritance';
 import { DOC_ORDER, DOC_LABELS } from '@/schemas';
 import type { Project, DocType, DocStatus, AnyDoc } from '@/schemas';
-import { Body, Header, Footer, PrintActions, type Snapshot } from './PrintDocument';
+import { Body, DocumentFrame, Footer, Header, PrintActions, type Snapshot } from './PrintDocument';
+import { PrintBrandLogo } from './PrintBrandLogo';
 
 interface Props {
   code: string;
 }
 
-type DocRow = {
+export type DocRow = {
   docType: DocType;
   label: string;
   status: DocStatus;
@@ -23,7 +23,7 @@ type DocRow = {
 };
 
 export default function PrintLegajo({ code }: Props) {
-  const { user, loading: authLoading } = useAuth();
+  const { user, loading: authLoading } = useAuth({ loadProfile: false });
   const [project, setProject] = useState<Project | null>(null);
   const [docs, setDocs] = useState<Partial<Record<DocType, AnyDoc>>>({});
   const [loading, setLoading] = useState(true);
@@ -95,29 +95,26 @@ export default function PrintLegajo({ code }: Props) {
 
   const isFinal = isLegajoFinal(rows);
   const pendingRows = rows.filter((row) => !row.locked || (row.docType === 'AC' && row.status !== 'firmado'));
-  const totalPages = DOC_ORDER.length + 2;
   const statusLabel = isFinal ? 'Final' : 'Borrador';
-  const statusCaption = isFinal ? 'Legajo listo para emitir' : 'Vista previa controlada';
+  const statusCaption = isFinal ? 'Documento técnico final' : 'Vista previa documental';
 
   return (
     <div className="print-shell">
-      <Cover
+      <LegajoCover
         project={project}
         statusLabel={statusLabel}
         statusCaption={statusCaption}
         isFinal={isFinal}
       />
 
-      <SummaryPage
+      <LegajoSummaryPage
         project={project}
         rows={rows}
         isFinal={isFinal}
         pendingRows={pendingRows}
-        pageNumber={2}
-        totalPages={totalPages}
       />
 
-      {DOC_ORDER.map((docType, i) => {
+      {DOC_ORDER.map((docType) => {
         const doc = docs[docType] ?? null;
         const row = rows.find((item) => item.docType === docType);
         const snapshot: Snapshot = doc
@@ -125,23 +122,20 @@ export default function PrintLegajo({ code }: Props) {
           : {};
         const status = row?.status ?? 'vacio';
         const locked = row?.locked ?? false;
-        const pageNumber = i + 3;
-        const isLast = i === DOC_ORDER.length - 1;
-
         return (
-          <div key={docType} className="print-page legajo-page" style={isLast ? undefined : { breakAfter: 'page' }}>
-            <div className="legajo-canvas legajo-doc-canvas">
-              <Header project={project} docType={docType} status={status} locked={locked} />
+          <section key={docType} className="print-page print-flow-page print-document-section">
+            <DocumentFrame
+              header={<Header project={project} docType={docType} status={status} locked={locked} />}
+              footer={<Footer project={project} doc={doc} />}
+            >
               {!locked && (
                 <div className="legajo-preview-note">
-                  <strong>Documento en vista previa:</strong> esta ficha todavía no está bloqueada. El legajo final
-                  debe emitirse con el snapshot firmado o completo.
+                  <strong>Documento en vista previa:</strong> esta instancia todavía no alcanzó su estado de cierre.
                 </div>
               )}
               <Body docType={docType} project={project} s={snapshot} />
-              <Footer project={project} doc={doc} pageNumber={pageNumber} totalPages={totalPages} />
-            </div>
-          </div>
+            </DocumentFrame>
+          </section>
         );
       })}
 
@@ -150,7 +144,7 @@ export default function PrintLegajo({ code }: Props) {
   );
 }
 
-function Cover({
+export function LegajoCover({
   project,
   statusLabel,
   statusCaption,
@@ -165,10 +159,7 @@ function Cover({
     <div className="print-page legajo-page" style={{ breakAfter: 'page' }}>
       <section className="legajo-canvas legajo-cover print-color">
         <div className="legajo-cover-top">
-          <div className="legajo-cover-logo">
-            <Logo size="lg" />
-            <span>Superficies y terminaciones</span>
-          </div>
+          <PrintBrandLogo inverse className="legajo-cover-logo-image" />
           <div className={`legajo-status-stamp ${isFinal ? 'is-final' : 'is-draft'}`}>
             <span>Estado</span>
             <strong>{statusLabel}</strong>
@@ -178,12 +169,10 @@ function Cover({
         <main className="legajo-cover-main">
           <p className="legajo-kicker">Protocolo de obra</p>
           <h1>
-            Legajo técnico
-            <span>completo</span>
+            Legajo<br />técnico
           </h1>
           <p>
-            Documento de control, trazabilidad y cierre para instalación de superficies.
-            {isFinal ? ' Emitido como versión final.' : ' Preparado para revisar antes de la emisión final.'}
+            Control, trazabilidad y cierre documental de la obra.
           </p>
         </main>
 
@@ -211,20 +200,16 @@ function Cover({
   );
 }
 
-function SummaryPage({
+export function LegajoSummaryPage({
   project,
   rows,
   isFinal,
   pendingRows,
-  pageNumber,
-  totalPages,
 }: {
   project: Project;
   rows: DocRow[];
   isFinal: boolean;
   pendingRows: DocRow[];
-  pageNumber: number;
-  totalPages: number;
 }) {
   const completeCount = rows.filter((row) => row.locked).length;
 
@@ -237,8 +222,7 @@ function SummaryPage({
           <p className="legajo-kicker">Resumen ejecutivo</p>
           <h2 className="legajo-page-title">Estado documental de la obra</h2>
           <p className="legajo-lead">
-            Esta primera página refleja el estado real del tablero del proyecto. El resumen usa el estado vivo
-            del proyecto para evitar portadas desactualizadas.
+            Síntesis de las seis instancias que integran el protocolo, con su estado documental al momento de emisión.
           </p>
 
           <div className="legajo-summary-grid">
@@ -298,21 +282,21 @@ function SummaryPage({
 
           <div className="legajo-exit-grid">
             <ExitItem
-              title={isFinal ? 'Documento final' : 'Vista previa permitida'}
-              text={isFinal ? 'La portada no muestra borrador y el legajo puede archivarse.' : 'Se puede revisar con etiqueta de borrador y estados visibles.'}
+              title="Trazabilidad"
+              text="Cada instancia conserva código, versión, estado y fecha de cierre disponibles."
             />
             <ExitItem
-              title={isFinal ? 'Snapshots bloqueados' : 'Final bloqueado'}
-              text={isFinal ? 'Cada ficha sale desde su versión cerrada.' : 'La versión final requiere todas las fichas cerradas, RF firmada y AC firmada.'}
+              title="Cierre documental"
+              text={isFinal ? 'Las seis instancias alcanzaron el estado requerido.' : 'Las instancias pendientes se identifican como vista previa.'}
             />
             <ExitItem
-              title="Portada viva"
-              text="El resumen toma project.docStatus para no depender de documentos en caché."
+              title="Alcance"
+              text={`${materialLabel(project)}${areaLabel(project)}.`}
             />
           </div>
         </main>
 
-        <LegajoFooter project={project} pageNumber={pageNumber} totalPages={totalPages} />
+        <LegajoFooter project={project} />
       </section>
     </div>
   );
@@ -321,7 +305,7 @@ function SummaryPage({
 function LegajoRunningHeader({ project, title }: { project: Project; title: string }) {
   return (
     <header className="legajo-running-header">
-      <Logo size="sm" />
+      <PrintBrandLogo className="print-doc-logo" />
       <div>
         <span>{title}</span>
         <strong>{project.code}</strong>
@@ -330,15 +314,11 @@ function LegajoRunningHeader({ project, title }: { project: Project; title: stri
   );
 }
 
-function LegajoFooter({ project, pageNumber, totalPages }: {
-  project: Project;
-  pageNumber: number;
-  totalPages: number;
-}) {
+function LegajoFooter({ project }: { project: Project }) {
   return (
     <footer className="legajo-running-footer">
       <span>{project.code} - {project.clienteNombre}</span>
-      <span>Página {String(pageNumber).padStart(2, '0')}/{String(totalPages).padStart(2, '0')}</span>
+      <span>Resumen documental</span>
     </footer>
   );
 }

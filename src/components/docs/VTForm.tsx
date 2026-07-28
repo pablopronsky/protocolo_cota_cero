@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray, type Control, type UseFormRegister } from 'react-hook-form';
 import { useDoc, offlineLockError } from '@/hooks/useDoc';
-import { setDocStatus, writeRevision, reopenDoc } from '@/lib/repo/projects';
+import { setDocStatus, reopenDoc } from '@/lib/repo/projects';
 import { buildLockedSnapshot } from '@/lib/inheritance';
 import { enqueuePhoto, removePhotoFromDoc } from '@/lib/photos';
 import PhotoThumb from '@/components/docs/PhotoThumb';
@@ -188,7 +188,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
     if (!await openConfirm('¿Marcar como completo? El documento quedará bloqueado.')) return;
-    cancelAutosave();
+    await cancelAutosave();
     setLocking(true);
     try {
       const { registroFotografico: _, ...restValues } = values;
@@ -202,7 +202,6 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
         lockedBy: user?.uid ?? '',
         version: (vt?.version ?? 0) + 1,
       } as Partial<AnyDoc>, project.status, { docStatus: project.docStatus, upstream });
-      await writeRevision(projectCode, 'VT', 'completo', snapshot, (vt?.version ?? 0) + 1, user?.uid ?? '');
     } catch (e) {
       setLockErrors([e instanceof Error ? e.message : 'No se pudo bloquear el documento.']);
     } finally {
@@ -213,10 +212,10 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
   // #19 — Admin puede reabrir un doc bloqueado (deja auditoría en revisions).
   async function handleReopen() {
     if (!await openConfirm('¿Reabrir este documento? Volverá a "en progreso" y quedará editable.', { danger: true })) return;
+    await cancelAutosave();
     setReopening(true);
     try {
-      await reopenDoc(projectCode, 'VT', user?.uid ?? '');
-      await writeRevision(projectCode, 'VT', 'en_progreso', (vt ?? {}) as Record<string, unknown>, (vt?.version ?? 0) + 1, user?.uid ?? '');
+      await reopenDoc(projectCode, 'VT', user?.uid ?? '', (vt ?? {}) as Record<string, unknown>, (vt?.version ?? 0) + 1);
       showToast('Documento reabierto', 'success');
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'No se pudo reabrir el documento.', 'error');

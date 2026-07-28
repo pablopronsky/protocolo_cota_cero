@@ -1,7 +1,7 @@
 import {
-  collection, doc, getDoc, getDocs, onSnapshot, addDoc,
+  collection, doc, getDoc, getDocs, onSnapshot,
   setDoc, updateDoc, writeBatch, query, orderBy, limit, startAfter,
-  serverTimestamp,
+  serverTimestamp, where,
   QueryDocumentSnapshot, DocumentData, Unsubscribe,
 } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseDb } from '../firebase/client';
@@ -18,6 +18,26 @@ export interface SequencingGuard {
 }
 
 const db = () => getFirebaseDb();
+function currentUid(): string {
+  const uid = getFirebaseAuth().currentUser?.uid;
+  if (!uid) throw new Error('Sesion no disponible. Volve a iniciar sesion.');
+  return uid;
+}
+
+function addRevisionToBatch(
+  batch: ReturnType<typeof writeBatch>,
+  projectCode: ProjectCode,
+  docType: DocType,
+  action: DocStatus,
+  snapshot: Record<string, unknown>,
+  version: number,
+  by: string,
+): void {
+  const revisionRef = doc(collection(db(), 'projects', projectCode, 'revisions'));
+  batch.set(revisionRef, {
+    docType, projectCode, action, snapshot, version, by, at: serverTimestamp(),
+  });
+}
 
 // ── Reads ─────────────────────────────────────────────────
 
@@ -29,10 +49,13 @@ export async function getProject(code: ProjectCode): Promise<Project | null> {
 export function subscribeProject(
   code: ProjectCode,
   callback: (project: Project | null) => void,
+  onError?: (error: Error) => void,
 ): Unsubscribe {
-  return onSnapshot(doc(db(), 'projects', code), (snap) => {
-    callback(snap.exists() ? (snap.data() as Project) : null);
-  });
+  return onSnapshot(
+    doc(db(), 'projects', code),
+    (snap) => callback(snap.exists() ? (snap.data() as Project) : null),
+    (error) => onError?.(error),
+  );
 }
 
 const PAGE_SIZE = 20;
@@ -63,6 +86,16 @@ export async function listAllProjects(): Promise<Project[]> {
   return snap.docs.map((d) => d.data() as Project);
 }
 
+export async function listProjectsByClient(clientId: string): Promise<Project[]> {
+  const snap = await getDocs(query(
+    collection(db(), 'projects'),
+    where('clienteId', '==', clientId),
+  ));
+  return snap.docs
+    .map((d) => d.data() as Project)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
 export async function getDoc_(projectCode: ProjectCode, docType: DocType): Promise<AnyDoc | null> {
   const snap = await getDoc(doc(db(), 'projects', projectCode, 'documents', docType));
   return snap.exists() ? (snap.data() as AnyDoc) : null;
@@ -81,10 +114,12 @@ export function subscribeDoc(
   projectCode: ProjectCode,
   docType: DocType,
   callback: (d: AnyDoc) => void,
+  onError?: (error: Error) => void,
 ): Unsubscribe {
   return onSnapshot(
     doc(db(), 'projects', projectCode, 'documents', docType),
     (snap) => { if (snap.exists()) callback(snap.data() as AnyDoc); },
+    (error) => onError?.(error),
   );
 }
 
@@ -119,9 +154,18 @@ export async function setDocStatus(
   const docRef = doc(db(), 'projects', projectCode, 'documents', docType);
   const projRef = doc(db(), 'projects', projectCode);
   const now = Date.now();
-  const updatedBy = getFirebaseAuth().currentUser?.uid ?? '';
+  const updatedBy = currentUid();
+  const isClosing = status === 'completo' || status === 'firmado';
+  const revisionSnapshot = extra.lockedSnapshot;
+  const revisionVersion = extra.version;
 
-  batch.update(docRef, { status, updatedAt: now, ...extra });
+  if (isClosing && (!revisionSnapshot || typeof revisionVersion !== 'number')) {
+    throw new Error('No se puede cerrar el documento sin snapshot y versión de revisión.');
+  }
+
+  // Los metadatos autoritativos van al final: un payload de formulario no puede
+  // pisar accidentalmente el estado objetivo, la fecha ni el autor del cambio.
+  batch.update(docRef, { ...extra, status, updatedAt: now, updatedBy });
 
   const projUpdate: Record<string, unknown> = {
     [`docStatus.${docType}`]: status,
@@ -140,6 +184,17 @@ export async function setDocStatus(
   }
 
   batch.update(projRef, projUpdate);
+  if (isClosing) {
+    addRevisionToBatch(
+      batch,
+      projectCode,
+      docType,
+      status,
+      revisionSnapshot as Record<string, unknown>,
+      revisionVersion as number,
+      updatedBy,
+    );
+  }
   await batch.commit();
 }
 
@@ -150,7 +205,12 @@ export async function reopenDoc(
   projectCode: ProjectCode,
   docType: DocType,
   by: string,
+  snapshot: Record<string, unknown>,
+  version: number,
 ): Promise<void> {
+  const actor = currentUid();
+  if (actor !== by) throw new Error('La sesión cambió. Volvé a intentar la reapertura.');
+
   const batch = writeBatch(db());
   const docRef = doc(db(), 'projects', projectCode, 'documents', docType);
   const projRef = doc(db(), 'projects', projectCode);
@@ -158,16 +218,21 @@ export async function reopenDoc(
 
   batch.update(docRef, {
     status: 'en_progreso' as DocStatus,
+    lockedSnapshot: null,
+    lockedAt: null,
+    lockedBy: null,
+    version,
     updatedAt: now,
-    updatedBy: by,
+    updatedBy: actor,
     reopenedAt: now,
-    reopenedBy: by,
+    reopenedBy: actor,
   });
   batch.update(projRef, {
     [`docStatus.${docType}`]: 'en_progreso' as DocStatus,
     updatedAt: now,
-    updatedBy: by,
+    updatedBy: actor,
   });
+  addRevisionToBatch(batch, projectCode, docType, 'en_progreso', snapshot, version, actor);
   await batch.commit();
 }
 
@@ -185,18 +250,17 @@ export async function unarchiveProject(projectCode: ProjectCode): Promise<void> 
   });
 }
 
-export async function writeRevision(
+export async function updateProjectMaterial(
   projectCode: ProjectCode,
-  docType: DocType,
-  action: DocStatus,
-  snapshot: Record<string, unknown>,
-  version: number,
-  by: string,
+  materialInstalado: Project['materialInstalado'],
 ): Promise<void> {
-  await addDoc(collection(db(), 'projects', projectCode, 'revisions'), {
-    docType, projectCode, action, snapshot, version, by, at: serverTimestamp(),
+  await updateDoc(doc(db(), 'projects', projectCode), {
+    materialInstalado,
+    updatedAt: Date.now(),
+    updatedBy: getFirebaseAuth().currentUser?.uid ?? '',
   });
 }
+
 
 // Inicializa los 6 documentos vacíos para un proyecto nuevo.
 export function initEmptyDocs(

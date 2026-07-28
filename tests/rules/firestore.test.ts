@@ -43,6 +43,9 @@ function admin() {
 function tecnico(uid = 'tec-uid') {
   return testEnv.authenticatedContext(uid, { role: 'tecnico' }).firestore();
 }
+function noRole() {
+  return testEnv.authenticatedContext('no-role-uid').firestore();
+}
 function unauth() {
   return testEnv.unauthenticatedContext().firestore();
 }
@@ -61,7 +64,19 @@ async function seedDoc(
   await testEnv.withSecurityRulesDisabled(async (ctx) => {
     await setDoc(
       doc(ctx.firestore(), 'projects', projectCode, 'documents', docType),
-      data,
+      {
+        docType,
+        projectCode,
+        status: 'vacio',
+        lockedSnapshot: null,
+        lockedAt: null,
+        lockedBy: null,
+        createdAt: 1000,
+        updatedAt: 1000,
+        updatedBy: 'admin-uid',
+        version: 0,
+        ...data,
+      },
     );
   });
 }
@@ -91,6 +106,11 @@ describe('Authentication gate', () => {
   it('allows admin read on projects', async () => {
     await seedProject('P-2025-001', BASE_PROJECT);
     await assertSucceeds(getDoc(doc(admin(), 'projects', 'P-2025-001')));
+  });
+
+  it('denies authenticated accounts without an application role', async () => {
+    await seedProject('P-2025-001', BASE_PROJECT);
+    await assertFails(getDoc(doc(noRole(), 'projects', 'P-2025-001')));
   });
 
   it('allows técnico read on projects', async () => {
@@ -274,7 +294,7 @@ describe('Document access control', () => {
     await assertSucceeds(
       updateDoc(
         doc(tecnico(), 'projects', 'P-2025-001', 'documents', 'VT'),
-        { status: 'en_progreso' },
+        { status: 'en_progreso', updatedAt: 2000, updatedBy: 'tec-uid' },
       ),
     );
   });
@@ -285,7 +305,7 @@ describe('Document access control', () => {
     await assertSucceeds(
       updateDoc(
         doc(tecnico(), 'projects', 'P-2025-001', 'documents', 'EP'),
-        { status: 'en_progreso' },
+        { status: 'en_progreso', updatedAt: 2000, updatedBy: 'tec-uid' },
       ),
     );
   });
@@ -364,7 +384,11 @@ describe('Document access control', () => {
     await assertSucceeds(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'AC'),
-        { status: 'en_progreso', updatedAt: 2000, updatedBy: 'admin-uid', reopenedAt: 2000, reopenedBy: 'admin-uid' },
+        {
+          status: 'en_progreso', updatedAt: 2000, updatedBy: 'admin-uid',
+          reopenedAt: 2000, reopenedBy: 'admin-uid',
+          lockedSnapshot: null, lockedAt: null, lockedBy: null, version: 1,
+        },
       ),
     );
   });
@@ -458,7 +482,10 @@ describe('Sequencing enforcement', () => {
     await assertFails(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'EP'),
-        { status: 'completo' },
+        {
+          status: 'completo', updatedAt: 2000, updatedBy: 'admin-uid',
+          lockedSnapshot: {}, lockedAt: 2000, lockedBy: 'admin-uid', version: 1,
+        },
       ),
     );
   });
@@ -470,7 +497,10 @@ describe('Sequencing enforcement', () => {
     await assertSucceeds(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'EP'),
-        { status: 'completo' },
+        {
+          status: 'completo', updatedAt: 2000, updatedBy: 'admin-uid',
+          lockedSnapshot: {}, lockedAt: 2000, lockedBy: 'admin-uid', version: 1,
+        },
       ),
     );
   });
@@ -481,7 +511,10 @@ describe('Sequencing enforcement', () => {
     await assertSucceeds(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'VT'),
-        { status: 'completo' },
+        {
+          status: 'completo', updatedAt: 2000, updatedBy: 'admin-uid',
+          lockedSnapshot: {}, lockedAt: 2000, lockedBy: 'admin-uid', version: 1,
+        },
       ),
     );
   });
@@ -493,7 +526,10 @@ describe('Sequencing enforcement', () => {
     await assertFails(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'AC'),
-        { status: 'firmado' },
+        {
+          status: 'firmado', updatedAt: 2000, updatedBy: 'admin-uid',
+          lockedSnapshot: {}, lockedAt: 2000, lockedBy: 'admin-uid', version: 1,
+        },
       ),
     );
   });
@@ -505,7 +541,10 @@ describe('Sequencing enforcement', () => {
     await assertSucceeds(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'AC'),
-        { status: 'firmado' },
+        {
+          status: 'firmado', updatedAt: 2000, updatedBy: 'admin-uid',
+          lockedSnapshot: {}, lockedAt: 2000, lockedBy: 'admin-uid', version: 1,
+        },
       ),
     );
   });
@@ -526,51 +565,57 @@ describe('Sequencing enforcement', () => {
 // ── Revisions: append-only (item 10) ─────────────────────────────
 
 describe('Revisions append-only', () => {
-  it('signed-in user can create revision with correct by + server timestamp', async () => {
-    const db = tecnico();
+  const validRevision = {
+    docType: 'VT',
+    projectCode: 'P-2025-001',
+    action: 'en_progreso',
+    snapshot: { status: 'en_progreso' },
+    version: 1,
+    by: 'tec-uid',
+    at: serverTimestamp(),
+  };
+
+  it('signed-in user can create a well-formed revision', async () => {
     await assertSucceeds(
-      addDoc(collection(db, 'projects', 'P-2025-001', 'revisions'), {
-        by: 'tec-uid',
-        at: serverTimestamp(),
-        note: 'progress update',
-      }),
+      addDoc(collection(tecnico(), 'projects', 'P-2025-001', 'revisions'), validRevision),
     );
   });
 
   it('cannot create revision with forged by field', async () => {
-    const db = tecnico();
     await assertFails(
-      addDoc(collection(db, 'projects', 'P-2025-001', 'revisions'), {
-        by: 'other-uid', // wrong uid
-        at: serverTimestamp(),
-        note: 'forged',
+      addDoc(collection(tecnico(), 'projects', 'P-2025-001', 'revisions'), {
+        ...validRevision,
+        by: 'other-uid',
       }),
     );
   });
 
-  it('cannot create revision with client-side timestamp instead of server timestamp', async () => {
-    const db = tecnico();
+  it('cannot create revision with client-side timestamp', async () => {
     await assertFails(
-      addDoc(collection(db, 'projects', 'P-2025-001', 'revisions'), {
-        by: 'tec-uid',
-        at: Date.now(), // should be serverTimestamp()
-        note: 'forged timestamp',
+      addDoc(collection(tecnico(), 'projects', 'P-2025-001', 'revisions'), {
+        ...validRevision,
+        at: Date.now(),
+      }),
+    );
+  });
+
+  it('cannot create revision with extra untrusted fields', async () => {
+    await assertFails(
+      addDoc(collection(tecnico(), 'projects', 'P-2025-001', 'revisions'), {
+        ...validRevision,
+        forged: true,
       }),
     );
   });
 
   it('unauthenticated cannot create revision', async () => {
     await assertFails(
-      addDoc(collection(unauth(), 'projects', 'P-2025-001', 'revisions'), {
-        by: 'anyone',
-        at: serverTimestamp(),
-        note: 'test',
-      }),
+      addDoc(collection(unauth(), 'projects', 'P-2025-001', 'revisions'), validRevision),
     );
   });
 });
 
-// ── Users collection ──────────────────────────────────────────────
+// Users collection
 
 describe('Users collection', () => {
   it('admin can write user', async () => {

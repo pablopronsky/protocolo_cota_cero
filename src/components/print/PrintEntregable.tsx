@@ -1,15 +1,25 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { getProject, getAllDocs } from '@/lib/repo/projects';
-import { getClient } from '@/lib/repo/clients';
 import { useAuth } from '@/hooks/useAuth';
 import { buildLockedSnapshot } from '@/lib/inheritance';
 import type { Project, Client, DocType, AnyDoc } from '@/schemas';
-import { Body, type Snapshot } from './PrintDocument';
+import { FM_DEFAULTS_BY_TIPO } from '@/schemas';
+import { formatMaterialForClient } from '@/lib/material';
+import { Body, DocumentFrame, type Snapshot } from './PrintDocument';
+import { MaintenanceGuide } from './MaintenanceGuide';
+import { PrintBrandLogo } from './PrintBrandLogo';
 
 interface Props {
   code: string;
+}
+
+type LoadError = 'auth' | 'not_found' | 'load' | null;
+
+interface DeliverablePayload {
+  project: Project;
+  documents: Partial<Record<DocType, AnyDoc>>;
+  client: Client | null;
 }
 
 // Entregable premium para el cliente: portada + Acta de Conformidad + Ficha de
@@ -21,25 +31,45 @@ export default function PrintEntregable({ code }: Props) {
   const [client, setClient] = useState<Client | null>(null);
   const [docs, setDocs] = useState<Partial<Record<DocType, AnyDoc>>>({});
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(false);
+  const [error, setError] = useState<LoadError>(null);
 
   useEffect(() => {
     if (authLoading) return;
-    if (!user) { setError(true); setLoading(false); return; }
+    if (!user) { setError('auth'); setLoading(false); return; }
 
     let alive = true;
     (async () => {
       try {
-        const [p, d] = await Promise.all([getProject(code), getAllDocs(code)]);
-        if (!alive) return;
-        if (!p) { setError(true); setLoading(false); return; }
-        setProject(p);
-        setDocs(d);
-        if (p.clienteId) {
-          getClient(p.clienteId).then((c) => { if (alive) setClient(c); }).catch(() => {});
+        setLoading(true);
+        setError(null);
+        const token = await user.getIdToken();
+        let res = await fetch(`/api/deliverable/${encodeURIComponent(code)}`, {
+          headers: { Authorization: `Bearer ${token}` },
+          cache: 'no-store',
+        });
+
+        // Una pestaña recién abierta puede conservar un token vencido durante
+        // unos milisegundos. Renovarlo una vez evita un falso error de carga.
+        if (res.status === 401) {
+          const refreshedToken = await user.getIdToken(true);
+          res = await fetch(`/api/deliverable/${encodeURIComponent(code)}`, {
+            headers: { Authorization: `Bearer ${refreshedToken}` },
+            cache: 'no-store',
+          });
         }
-      } catch {
-        if (alive) setError(true);
+
+        if (!alive) return;
+        if (res.status === 401) { setError('auth'); return; }
+        if (res.status === 404) { setError('not_found'); return; }
+        if (!res.ok) throw new Error(`deliverable ${res.status}`);
+
+        const payload = await res.json() as DeliverablePayload;
+        setProject(payload.project);
+        setDocs(payload.documents);
+        setClient(payload.client);
+      } catch (loadError) {
+        console.error('[PrintEntregable]', loadError);
+        if (alive) setError('load');
       } finally {
         if (alive) setLoading(false);
       }
@@ -56,20 +86,24 @@ export default function PrintEntregable({ code }: Props) {
   }
 
   if (error || !project) {
+    const authError = error === 'auth';
+    const message = authError
+      ? 'Tu sesión venció. Ingresá nuevamente para preparar el PDF.'
+      : error === 'not_found'
+        ? 'No encontramos esta obra.'
+        : 'No pudimos preparar el entregable. Reintentá en unos segundos.';
     return (
       <div className="print-shell">
-        <div className="print-page"><p className="text-sm text-red-600">No se pudo cargar el entregable.</p></div>
-      </div>
-    );
-  }
-
-  if (project.docStatus?.AC !== 'firmado') {
-    return (
-      <div className="print-shell">
-        <div className="print-page">
-          <p className="text-sm text-[#B8AEA3]">
-            El entregable estará disponible una vez que el Acta de Conformidad esté firmada.
-          </p>
+        <div className="print-page flex min-h-[80vh] items-center justify-center">
+          <div className="max-w-md text-center">
+            <p className="font-semibold text-[#2B2D2F]">{message}</p>
+            <a
+              href={authError ? `/login?next=${encodeURIComponent(`/print/${code}/entregable`)}` : window.location.href}
+              className="inline-block mt-5 rounded-md bg-[#C38A5A] px-5 py-3 text-sm font-semibold text-white"
+            >
+              {authError ? 'Volver a ingresar' : 'Reintentar'}
+            </a>
+          </div>
         </div>
       </div>
     );
@@ -80,17 +114,22 @@ export default function PrintEntregable({ code }: Props) {
     return d ? (d.lockedSnapshot ?? buildLockedSnapshot(project, docs, d)) : {};
   };
 
+  const fmDoc = docs.FM;
+  const fmSnapshot = fmDoc?.status === 'vacio' || !fmDoc
+    ? { ...FM_DEFAULTS_BY_TIPO[project.materialInstalado.tipo], ...snapFor('FM') }
+    : snapFor('FM');
+
   return (
     <div className="print-shell">
-      <Cover project={project} />
+      <DeliverableCover project={project} />
 
-      <DocPage title="Acta de Conformidad" code={project.code}>
-        <Body docType="AC" project={project} s={snapFor('AC')} />
-      </DocPage>
+      <DeliverableDocPage title="Acta de Conformidad" project={project} docCode="AC">
+        <Body docType="AC" project={project} s={snapFor('AC')} clientFacing />
+      </DeliverableDocPage>
 
-      <DocPage title="Ficha de Mantenimiento" code={project.code} last>
-        <Body docType="FM" project={project} s={snapFor('FM')} />
-      </DocPage>
+      <DeliverableDocPage title="Ficha de Mantenimiento" project={project} docCode="FM" last>
+        <MaintenanceGuide project={project} snapshot={fmSnapshot} />
+      </DeliverableDocPage>
 
       <Actions project={project} client={client} />
     </div>
@@ -98,51 +137,36 @@ export default function PrintEntregable({ code }: Props) {
 }
 
 // ── Portada ──────────────────────────────────────────────────
-function Cover({ project }: { project: Project }) {
+export function DeliverableCover({ project }: { project: Project }) {
   return (
-    <div
-      className="print-page print-cover print-color"
-      style={{
-        background: '#1A1B1D',
-        color: '#F5F2ED',
-        minHeight: '240mm',
-        display: 'flex',
-        flexDirection: 'column',
-        justifyContent: 'space-between',
-        breakAfter: 'page',
-      }}
-    >
-      <div className="flex justify-between items-start">
-        <span className="font-mono text-[10px] tracking-[0.3em] text-[#B8AEA3]/70 uppercase">
-          Entrega de obra
-        </span>
-        <span className="font-mono text-[11px] font-bold tracking-[0.2em] text-[#C38A5A]">
-          {project.code}
-        </span>
+    <div className="print-page deliverable-cover print-color">
+      <div className="deliverable-cover-top">
+        <PrintBrandLogo inverse className="deliverable-cover-logo" />
+        <div>
+          <strong>{project.code}</strong>
+          <span>Documentación para el propietario</span>
+        </div>
       </div>
 
-      <div className="flex flex-col items-center text-center py-10">
-        <Wordmark />
-        <p className="mt-4 text-[11px] tracking-[0.42em] text-[#B8AEA3] uppercase">
-          Superficies y Terminaciones
-        </p>
-        <div className="w-10 h-px bg-[#C38A5A] my-7" />
-        <p className="text-[13px] tracking-[0.2em] text-[#F5F2ED]/85 uppercase">
-          Documentación de entrega
-        </p>
+      <main className="deliverable-cover-main">
+        <p>Documentación para el propietario</p>
+        <h1>Entrega<br />de obra</h1>
+        <h2>Acta de conformidad y ficha de mantenimiento</h2>
+        <blockquote>La superficie bien resuelta empieza antes de colocar.</blockquote>
+      </main>
+
+      <div className="deliverable-cover-status">
+        <span aria-hidden>✓</span>
+        <strong>Apto para entrega</strong>
       </div>
 
-      <div className="border-t border-white/10 pt-5 space-y-3">
-        <Row label="Cliente" value={project.clienteNombre} />
+      <div className="deliverable-cover-meta">
+        <Row label="Proyecto" value={project.clienteNombre} />
+        <Row label="Espacio" value={humanize(project.tipoEspacio)} />
         <Row
-          label="Domicilio de obra"
-          value={`${project.domicilioObra.calle} ${project.domicilioObra.numero}, ${project.domicilioObra.localidad}`}
+          label="Sistema instalado"
+          value={`${project.materialInstalado.tipo.toUpperCase()} · ${formatMaterialForClient(project.materialInstalado.descripcion)}`}
         />
-        <Row
-          label="Material instalado"
-          value={`${cap(project.materialInstalado.tipo)} · ${project.materialInstalado.descripcion}`}
-        />
-        <Row label="Fecha de entrega" value={new Date().toLocaleDateString('es-AR')} />
       </div>
     </div>
   );
@@ -150,54 +174,45 @@ function Cover({ project }: { project: Project }) {
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex justify-between items-baseline gap-6">
-      <span className="text-[10px] uppercase tracking-[0.22em] text-[#B8AEA3]/70 shrink-0">{label}</span>
-      <span className="text-sm font-medium text-[#F5F2ED] text-right">{value || '—'}</span>
-    </div>
-  );
-}
-
-function Wordmark() {
-  return (
-    <div
-      className="flex items-center font-bold uppercase"
-      style={{ fontSize: 54, letterSpacing: '0.155em', lineHeight: 1, color: '#F5F2ED' }}
-    >
-      COTA
-      <span style={{ display: 'inline-block', position: 'relative', width: 2, height: '0.82em', margin: '0 0.32em', background: '#C38A5A' }}>
-        <span style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', width: 10, height: 10, background: '#C38A5A' }} />
-      </span>
-      CERO
+    <div>
+      <span>{label}</span>
+      <strong>{value || '—'}</strong>
     </div>
   );
 }
 
 // ── Página de documento (branded, sin metadatos internos) ────
-function DocPage({ title, code, last, children }: {
-  title: string; code: string; last?: boolean; children: React.ReactNode;
+export function DeliverableDocPage({ title, project, docCode, last, children }: {
+  title: string; project: Project; docCode: 'AC' | 'FM'; last?: boolean; children: React.ReactNode;
 }) {
   return (
-    <div className="print-page" style={last ? undefined : { breakAfter: 'page' }}>
-      <header className="flex justify-between items-end border-b-2 border-[#2B2D2F] pb-3 mb-5">
-        <div>
-          <div className="font-mono font-bold text-lg tracking-[3px] text-[#2B2D2F]">
-            COTA<span className="text-[#C38A5A]">·</span>CERO
-          </div>
-          <div className="text-[9px] text-[#B8AEA3] tracking-[2px] mt-0.5 uppercase">
-            Superficies y Terminaciones
-          </div>
+    <section className={`print-page print-flow-page deliverable-document ${last ? 'is-last' : ''}`}>
+      <DocumentFrame
+        header={(
+          <header className="deliverable-doc-header">
+            <PrintBrandLogo className="print-doc-logo" />
+            <div><span>{project.code}</span><strong>{docCode} · {title}</strong></div>
+          </header>
+        )}
+        footer={(
+          <footer className="deliverable-doc-footer">
+            <span>{project.code} · COTA CERO - Protocolo de obra</span>
+            <span>Documento de entrega</span>
+          </footer>
+        )}
+      >
+        <div className="deliverable-doc-title">
+          <p>Documento de entrega · {docCode}</p>
+          <h1>{title}</h1>
         </div>
-        <div className="text-right">
-          <div className="text-lg font-bold text-[#2B2D2F] leading-tight">{title}</div>
-          <div className="font-mono text-[11px] text-[#C38A5A] tracking-wider">{code}</div>
-        </div>
-      </header>
-      {children}
-      <footer className="mt-6 pt-2 border-t border-[#B8AEA3]/50 text-center text-[9px] text-[#B8AEA3] tracking-[0.2em] uppercase">
-        Gracias por elegir COTA·CERO · Superficies y Terminaciones
-      </footer>
-    </div>
+        {children}
+      </DocumentFrame>
+    </section>
   );
+}
+
+function humanize(value: string): string {
+  return value.replace(/_/g, ' ');
 }
 
 // ── Acciones (pantalla) ──────────────────────────────────────
@@ -228,8 +243,4 @@ function Actions({ project, client }: { project: Project; client: Client | null 
       </button>
     </div>
   );
-}
-
-function cap(s: string): string {
-  return s ? s.charAt(0).toUpperCase() + s.slice(1) : s;
 }

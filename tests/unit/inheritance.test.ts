@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { deriveInherited, buildLockedSnapshot, detectDrift } from '@/lib/inheritance';
-import type { Project, DocVT, DocEP, DocOT, DocRF } from '@/schemas';
+import type { Project, DocVT, DocEP, DocOT } from '@/schemas';
 
 // ── Fixtures ──────────────────────────────────────────────────────
 

@@ -36,6 +36,9 @@ export function sequencingError(
   // (Que RF esté firmada ya lo garantiza el chequeo del documento anterior.)
   if (docType === 'AC') {
     const rf = upstream?.RF as DocRF | undefined;
+    if (target === 'firmado' && !rf) {
+      return 'No se pudo verificar la revisión final (RF): recargá el proyecto antes de firmar el acta.';
+    }
     if (rf && rf.aptoEntrega !== true) {
       return 'La revisión final (RF) marcó la obra como NO apta para entrega: no se puede firmar el acta.';
     }
