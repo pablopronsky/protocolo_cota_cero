@@ -2,6 +2,7 @@ import { initializeApp, getApps, cert, App } from 'firebase-admin/app';
 import { getFirestore, Firestore } from 'firebase-admin/firestore';
 import { getAuth, Auth } from 'firebase-admin/auth';
 import { getStorage } from 'firebase-admin/storage';
+import { getServerEnv } from '@/lib/env';
 
 let adminApp: App;
 let adminDb: Firestore;
@@ -23,22 +24,25 @@ function normalizePrivateKey(raw: string | undefined): string | undefined {
 // Variante a prueba de dashboards: la clave como base64 de UNA sola línea
 // (FIREBASE_ADMIN_PRIVATE_KEY_B64). Un valor de una línea no puede perder
 // saltos ni ganar comillas al pegarlo. Tiene prioridad sobre el PEM crudo.
-function resolvePrivateKey(): string | undefined {
-  const b64 = process.env.FIREBASE_ADMIN_PRIVATE_KEY_B64;
+function resolvePrivateKey(raw: string | undefined, b64: string | undefined): string | undefined {
   if (b64) {
     const decoded = Buffer.from(b64.trim(), 'base64').toString('utf8');
     if (decoded.includes('-----BEGIN')) return decoded;
   }
-  return normalizePrivateKey(process.env.FIREBASE_ADMIN_PRIVATE_KEY);
+  return normalizePrivateKey(raw);
 }
 
 function getAdminApp(): App {
   if (getApps().length === 0) {
+    const env = getServerEnv();
     adminApp = initializeApp({
       credential: cert({
-        projectId:   process.env.FIREBASE_ADMIN_PROJECT_ID,
-        clientEmail: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
-        privateKey:  resolvePrivateKey(),
+        projectId:   env.FIREBASE_ADMIN_PROJECT_ID,
+        clientEmail: env.FIREBASE_ADMIN_CLIENT_EMAIL,
+        privateKey:  resolvePrivateKey(
+          env.FIREBASE_ADMIN_PRIVATE_KEY,
+          env.FIREBASE_ADMIN_PRIVATE_KEY_B64,
+        ),
       }),
     });
   } else {

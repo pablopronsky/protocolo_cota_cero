@@ -21,13 +21,22 @@ export const clientEnv = clientEnvSchema.parse({
 const serverEnvSchema = z.object({
   FIREBASE_ADMIN_PROJECT_ID:   z.string().min(1),
   FIREBASE_ADMIN_CLIENT_EMAIL: z.string().min(1),
-  FIREBASE_ADMIN_PRIVATE_KEY:  z.string().min(1),
-});
+  FIREBASE_ADMIN_PRIVATE_KEY:  z.string().min(1).optional(),
+  FIREBASE_ADMIN_PRIVATE_KEY_B64: z.string().min(1).optional(),
+}).refine(
+  ({ FIREBASE_ADMIN_PRIVATE_KEY, FIREBASE_ADMIN_PRIVATE_KEY_B64 }) =>
+    Boolean(FIREBASE_ADMIN_PRIVATE_KEY || FIREBASE_ADMIN_PRIVATE_KEY_B64),
+  {
+    message: 'FIREBASE_ADMIN_PRIVATE_KEY o FIREBASE_ADMIN_PRIVATE_KEY_B64 es obligatoria.',
+    path: ['FIREBASE_ADMIN_PRIVATE_KEY'],
+  },
+);
 
-export const serverEnv = typeof window === 'undefined'
-  ? serverEnvSchema.parse({
-      FIREBASE_ADMIN_PROJECT_ID:   process.env.FIREBASE_ADMIN_PROJECT_ID,
-      FIREBASE_ADMIN_CLIENT_EMAIL: process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
-      FIREBASE_ADMIN_PRIVATE_KEY:  process.env.FIREBASE_ADMIN_PRIVATE_KEY,
-    })
-  : null;
+export function getServerEnv() {
+  return serverEnvSchema.parse({
+    FIREBASE_ADMIN_PROJECT_ID:      process.env.FIREBASE_ADMIN_PROJECT_ID,
+    FIREBASE_ADMIN_CLIENT_EMAIL:    process.env.FIREBASE_ADMIN_CLIENT_EMAIL,
+    FIREBASE_ADMIN_PRIVATE_KEY:     process.env.FIREBASE_ADMIN_PRIVATE_KEY,
+    FIREBASE_ADMIN_PRIVATE_KEY_B64: process.env.FIREBASE_ADMIN_PRIVATE_KEY_B64,
+  });
+}
