@@ -58,9 +58,25 @@ export function pendingPhotoRefs(value: unknown): PhotoRef[] {
  * Mensaje de bloqueo si el documento no se puede cerrar todavía, o `null` si
  * todos los adjuntos están sincronizados.
  */
-export function pendingUploadsError(value: unknown): string | null {
-  const count = pendingPhotoRefs(value).length;
-  if (count === 0) return null;
+export function pendingUploadsError(
+  value: unknown,
+  // #P1 — Estado de la cola local, cuando el caller lo tiene. Sin esto el
+  // mensaje dice "esperá a que termine de subir" incluso para una imagen que
+  // Storage ya rechazó de forma definitiva, y el usuario espera para siempre.
+  queue?: ReadonlyMap<string, { state: 'pending' | 'error' }>,
+): string | null {
+  const pendings = pendingPhotoRefs(value);
+  if (pendings.length === 0) return null;
+
+  const failed = queue
+    ? pendings.filter((photo) => queue.get(photo.id)?.state === 'error').length
+    : 0;
+  if (failed > 0) {
+    const noun = failed === 1 ? 'imagen' : 'imágenes';
+    return `${failed} ${noun} no se pudieron subir. Reintentá o eliminalas antes de cerrar el documento.`;
+  }
+
+  const count = pendings.length;
   const noun = count === 1 ? 'imagen' : 'imágenes';
   return `Esperá a que terminen de subir ${count} ${noun} antes de cerrar el documento.`;
 }

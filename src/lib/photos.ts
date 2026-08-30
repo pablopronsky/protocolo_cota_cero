@@ -1,31 +1,48 @@
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseStorage, getFirebaseDb } from './firebase/client';
+import { normalizeImage, assertUploadable, UPLOAD_EXT, PhotoPipelineError } from './imageNormalize';
 import type { PhotoRef, ProjectCode, DocType } from '@/schemas';
 
 // #23 — La cola offline vive en IndexedDB (no localStorage): guarda los Blobs
 // comprimidos directamente, sin inflar a base64 ni chocar contra el tope de 5MB.
-// Las fotos se reducen antes de encolar y todas las escrituras van envueltas en
-// try/catch para que un fallo de cuota/IO se propague en vez de perderse en
-// silencio.
+//
+// #P1 — Cámara física. Dos cambios de fondo respecto de la versión anterior:
+//
+//   1. Nada entra a la cola sin haber sido normalizado a JPEG y validado contra
+//      el contrato de Storage (`imageNormalize.ts`). Antes, una captura HEIC se
+//      encolaba cruda y Storage la rechazaba en cada intento.
+//   2. `flushPhotoQueue()` ya no se traga los errores. Distingue fallo
+//      transitorio (sigue en cola, se reintenta) de fallo permanente (se marca,
+//      se deja de reintentar y la UI lo muestra). El estado "pendiente para
+//      siempre y sin explicación" deja de ser alcanzable.
 
 const DB_NAME = 'cotacero';
 const DB_VERSION = 1;
 const STORE = 'photoQueue';
 const LEGACY_QUEUE_KEY = 'cotacero_photo_queue';
 
+/** Fallo registrado sobre una entrada de la cola. */
+export interface QueueFailure {
+  code: string;      // código de Firebase o del pipeline, para diagnóstico
+  message: string;   // texto mostrable al usuario
+  at: number;
+}
+
 interface QueueEntry {
   entryId: string; // clave única de la entrada (no la del PhotoRef)
   projectCode: ProjectCode;
   docType: DocType;
   photoRef: PhotoRef; // cleanRef — sin localBlob
-  blob: Blob; // imagen comprimida lista para subir
+  blob: Blob; // imagen normalizada lista para subir
   signatureField?: string; // si está: actualizar este campo en lugar de registroFotografico
+  attempts?: number; // intentos con respuesta del servidor (no cuenta los offline)
+  failed?: QueueFailure; // si está: fallo permanente, no se reintenta solo
 }
 
-// ── Compresión ───────────────────────────────────────────
-const MAX_DIM = 1600;       // lado máximo en px
-const JPEG_QUALITY = 0.7;
+// Después de esto damos por permanente un error que se presentaba como
+// transitorio: evita el reintento ciego e infinito ante un fallo desconocido.
+const MAX_ATTEMPTS = 8;
 
 function auditFields(): { updatedAt: number; updatedBy: string } {
   const uid = getFirebaseAuth().currentUser?.uid;
@@ -33,31 +50,6 @@ function auditFields(): { updatedAt: number; updatedBy: string } {
     throw new Error('La sesión venció. Volvé a iniciar sesión antes de guardar archivos.');
   }
   return { updatedAt: Date.now(), updatedBy: uid };
-}
-
-// Redimensiona y recodifica a JPEG. Si algo falla (formato raro, sin canvas),
-// cae al archivo original para no bloquear la captura.
-async function compressImage(file: File): Promise<Blob> {
-  try {
-    if (typeof createImageBitmap !== 'function' || typeof document === 'undefined') return file;
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, MAX_DIM / Math.max(bitmap.width, bitmap.height));
-    const w = Math.max(1, Math.round(bitmap.width * scale));
-    const h = Math.max(1, Math.round(bitmap.height * scale));
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) { bitmap.close(); return file; }
-    ctx.drawImage(bitmap, 0, 0, w, h);
-    bitmap.close();
-    const blob = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, 'image/jpeg', JPEG_QUALITY),
-    );
-    return blob ?? file;
-  } catch {
-    return file;
-  }
 }
 
 // ── IndexedDB ────────────────────────────────────────────
@@ -105,6 +97,159 @@ const idbPut = (entry: QueueEntry) => withStore('readwrite', (s) => s.put(entry)
 const idbGetAll = () => withStore<QueueEntry[]>('readonly', (s) => s.getAll());
 const idbDelete = (entryId: string) => withStore('readwrite', (s) => s.delete(entryId));
 
+// ── Estado observable de la cola ─────────────────────────
+// La UI necesita distinguir "pendiente de sincronización" de "error al subir", y
+// esa diferencia solo existe acá: el binario vive en IndexedDB, en este
+// dispositivo. Firestore solo sabe `pending: true`.
+
+export type PhotoUploadState = 'pending' | 'error';
+
+export interface PhotoQueueItem {
+  photoId: string;
+  state: PhotoUploadState;
+  message?: string;
+  code?: string;
+}
+
+/** Estado por `PhotoRef.id`. Solo incluye adjuntos que siguen en la cola. */
+export type PhotoQueueSnapshot = ReadonlyMap<string, PhotoQueueItem>;
+
+const listeners = new Set<(snapshot: PhotoQueueSnapshot) => void>();
+
+function snapshotFrom(entries: QueueEntry[]): PhotoQueueSnapshot {
+  const map = new Map<string, PhotoQueueItem>();
+  for (const entry of entries) {
+    map.set(entry.photoRef.id, entry.failed
+      ? { photoId: entry.photoRef.id, state: 'error', message: entry.failed.message, code: entry.failed.code }
+      : { photoId: entry.photoRef.id, state: 'pending' });
+  }
+  return map;
+}
+
+async function notifyQueueListeners(): Promise<void> {
+  if (listeners.size === 0) return;
+  let snapshot: PhotoQueueSnapshot;
+  try {
+    snapshot = snapshotFrom(await idbGetAll());
+  } catch {
+    return; // sin lectura de la cola no hay nada que informar
+  }
+  for (const listener of listeners) listener(snapshot);
+}
+
+/** Se suscribe al estado de la cola. Emite una vez al suscribirse. */
+export function subscribePhotoQueue(
+  listener: (snapshot: PhotoQueueSnapshot) => void,
+): () => void {
+  listeners.add(listener);
+  void notifyQueueListeners();
+  return () => { listeners.delete(listener); };
+}
+
+export async function getPhotoQueueSnapshot(): Promise<PhotoQueueSnapshot> {
+  try {
+    return snapshotFrom(await idbGetAll());
+  } catch {
+    return new Map();
+  }
+}
+
+// ── Clasificación de errores ─────────────────────────────
+
+export type FailureKind = 'transient' | 'permanent';
+
+export interface ClassifiedFailure {
+  kind: FailureKind;
+  code: string;
+  message: string;
+}
+
+// Códigos de Firebase que describen una condición que no cambia por reintentar:
+// el archivo, el path o el permiso están mal. Reintentar solo gasta batería.
+const PERMANENT_CODES = new Set([
+  'storage/unauthorized',
+  'storage/invalid-argument',
+  'storage/invalid-format',
+  'storage/invalid-url',
+  'storage/invalid-root-operation',
+  'storage/bucket-not-found',
+  'storage/project-not-found',
+  'storage/quota-exceeded',
+  'permission-denied',
+  'invalid-argument',
+  'not-found',
+  'failed-precondition',
+]);
+
+// Fallos de red o de disponibilidad. La foto se queda en cola tal cual.
+const TRANSIENT_CODES = new Set([
+  'storage/retry-limit-exceeded',
+  'storage/canceled',
+  'storage/unknown',
+  'storage/server-file-wrong-size',
+  'storage/unauthenticated',
+  'firestore/timeout', // sin ACK dentro del flush: falta de señal, no rechazo
+  'unavailable',
+  'deadline-exceeded',
+  'resource-exhausted',
+  'aborted',
+  'internal',
+  'cancelled',
+]);
+
+const MSG_PERMANENT: Record<string, string> = {
+  'storage/unauthorized': 'El servidor rechazó esta imagen. Eliminala y sacá otra foto.',
+  'storage/invalid-format': 'El formato de esta imagen no es válido. Eliminala y sacá otra foto.',
+  'storage/quota-exceeded': 'No hay espacio disponible para subir la foto. Avisá a administración.',
+  'permission-denied': 'No tenés permiso para subir esta imagen, o el documento ya está cerrado.',
+};
+
+function errorCode(e: unknown): string {
+  if (e instanceof PhotoPipelineError) return `pipeline/${e.code}`;
+  const candidate = e as { code?: unknown };
+  if (typeof candidate?.code === 'string') return candidate.code;
+  return 'unknown';
+}
+
+export function classifyUploadError(e: unknown): ClassifiedFailure {
+  const code = errorCode(e);
+
+  // Sin conexión no hay diagnóstico posible: es transitorio por definición.
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    return { kind: 'transient', code: 'offline', message: 'Pendiente de sincronización' };
+  }
+
+  if (e instanceof PhotoPipelineError) {
+    return { kind: 'permanent', code, message: e.message };
+  }
+  if (PERMANENT_CODES.has(code)) {
+    return {
+      kind: 'permanent',
+      code,
+      message: MSG_PERMANENT[code] ?? 'El servidor rechazó esta imagen. Eliminala y sacá otra foto.',
+    };
+  }
+  if (TRANSIENT_CODES.has(code)) {
+    return { kind: 'transient', code, message: 'Pendiente de sincronización' };
+  }
+  // Desconocido: se trata como transitorio, pero MAX_ATTEMPTS le pone techo.
+  return { kind: 'transient', code, message: 'Pendiente de sincronización' };
+}
+
+// Diagnóstico sin secretos: ni URLs firmadas, ni tokens, ni contenido.
+function logFailure(entry: QueueEntry, failure: ClassifiedFailure, attempts: number): void {
+  console.warn('[photos] fallo de subida', {
+    photoId: entry.photoRef.id,
+    storagePath: entry.photoRef.storagePath,
+    docType: entry.docType,
+    blobType: entry.blob.type,
+    blobSize: entry.blob.size,
+    kind: failure.kind,
+    code: failure.code,
+    attempts,
+  });
+}
+
 // ── Encolado ─────────────────────────────────────────────
 // Encola una foto en registroFotografico. Escribe el ref en Firestore como
 // pending (sin localBlob). El caller guarda el localBlob en estado local del
@@ -116,8 +261,11 @@ export async function enqueuePhoto(
   uploadedBy: string,
 ): Promise<{ id: string; localBlob: string }> {
   const id = crypto.randomUUID();
-  const storagePath = `projects/${projectCode}/${docType}/${id}.jpg`;
-  const blob = await compressImage(file);
+  const storagePath = `projects/${projectCode}/${docType}/${id}.${UPLOAD_EXT}`;
+  // Si el archivo no se puede normalizar, esto lanza y el formulario muestra el
+  // error. No se escribe nada ni en IndexedDB ni en Firestore.
+  const blob = await normalizeImage(file);
+  assertUploadable(blob);
   const localBlob = URL.createObjectURL(blob);
 
   const cleanRef: PhotoRef = {
@@ -134,14 +282,23 @@ export async function enqueuePhoto(
     URL.revokeObjectURL(localBlob);
     throw new Error('No se pudo guardar la foto en la cola local: ' + describeError(e));
   }
+  void notifyQueueListeners();
 
   // Único escritor del array: arrayUnion garantiza idempotencia. Si falla, el
   // blob queda en cola y el flush posterior agrega la versión subida.
+  //
+  // No se espera el ack del servidor: con `persistentLocalCache` la promesa de
+  // `updateDoc` no resuelve hasta que la escritura se confirma, así que
+  // esperarla dejaba la captura colgada mientras no hubiera señal —
+  // exactamente el escenario de obra. La caché local aplica el cambio al
+  // instante y el SDK conserva la escritura hasta reconectar; acá solo se
+  // registra el fallo si la escritura resulta rechazada.
   const db = getFirebaseDb();
-  await updateDoc(doc(db, 'projects', projectCode, 'documents', docType), {
+  const audit = auditFields();
+  void updateDoc(doc(db, 'projects', projectCode, 'documents', docType), {
     registroFotografico: arrayUnion(cleanRef),
-    ...auditFields(),
-  });
+    ...audit,
+  }).catch((e: unknown) => { void recordEntryFailure(id, e); });
 
   if (typeof navigator !== 'undefined' && navigator.onLine) void flushPhotoQueue();
 
@@ -157,8 +314,9 @@ export async function enqueueSignature(
   uploadedBy: string,
 ): Promise<{ cleanRef: PhotoRef; localBlob: string }> {
   const id = crypto.randomUUID();
-  const storagePath = `projects/${projectCode}/AC/${id}.jpg`;
-  const blob = await compressImage(file);
+  const storagePath = `projects/${projectCode}/AC/${id}.${UPLOAD_EXT}`;
+  const blob = await normalizeImage(file);
+  assertUploadable(blob);
   const localBlob = URL.createObjectURL(blob);
 
   const cleanRef: PhotoRef = {
@@ -175,16 +333,41 @@ export async function enqueueSignature(
     URL.revokeObjectURL(localBlob);
     throw new Error('No se pudo guardar la firma en la cola local: ' + describeError(e));
   }
+  void notifyQueueListeners();
 
+  // Misma razón que en enqueuePhoto: no se espera el ack para no bloquear la
+  // firma sin señal. El SDK preserva el orden de las escrituras locales, así
+  // que lo que el acta escriba después sigue quedando por detrás de esta.
   const db = getFirebaseDb();
-  await updateDoc(doc(db, 'projects', projectCode, 'documents', 'AC'), {
+  const audit = auditFields();
+  void updateDoc(doc(db, 'projects', projectCode, 'documents', 'AC'), {
     [signatureField]: cleanRef,
-    ...auditFields(),
-  });
+    ...audit,
+  }).catch((e: unknown) => { void recordEntryFailure(id, e); });
 
   if (typeof navigator !== 'undefined' && navigator.onLine) void flushPhotoQueue();
 
   return { cleanRef, localBlob };
+}
+
+/**
+ * Marca una entrada de la cola con un fallo permanente. Se usa cuando lo que
+ * falla no es la subida sino la escritura del `PhotoRef` en Firestore: sin esto
+ * la foto quedaría en la cola sin que nadie explique por qué no avanza.
+ */
+async function recordEntryFailure(photoId: string, e: unknown): Promise<void> {
+  const failure = classifyUploadError(e);
+  if (failure.kind !== 'permanent') return; // transitorio: el SDK reintenta solo
+  try {
+    const all = await idbGetAll();
+    const entry = all.find((x) => x.photoRef.id === photoId);
+    if (!entry) return;
+    logFailure(entry, failure, entry.attempts ?? 0);
+    await idbPut({ ...entry, failed: { code: failure.code, message: failure.message, at: Date.now() } });
+    await notifyQueueListeners();
+  } catch {
+    // best-effort: sin la cola no hay nada que anotar.
+  }
 }
 
 // Elimina una foto de registroFotografico en Firestore y la cancela en la cola.
@@ -207,11 +390,27 @@ export async function removePhotoFromDoc(
         (e) => e.projectCode === projectCode && e.docType === docType && e.photoRef.id === photoRef.id && !e.signatureField,
       );
       if (match) await idbDelete(match.entryId);
+      void notifyQueueListeners();
     } catch {
       // best-effort: si no se puede limpiar la cola, el flush igual fallará el
       // arrayUnion sobre un doc del que ya se quitó la foto — sin efecto visible.
     }
   }
+}
+
+/**
+ * Reintenta a mano un adjunto marcado como error permanente. Limpia la marca y
+ * dispara un flush; si vuelve a fallar, se vuelve a marcar.
+ */
+export async function retryPhotoUpload(photoId: string): Promise<void> {
+  const all = await idbGetAll();
+  const entry = all.find((e) => e.photoRef.id === photoId);
+  if (!entry) return;
+  const cleared: QueueEntry = { ...entry, attempts: 0 };
+  delete cleared.failed;
+  await idbPut(cleared);
+  await notifyQueueListeners();
+  await flushPhotoQueue();
 }
 
 // Cancela una firma encolada (al descartar la firma del cliente en el acta).
@@ -228,14 +427,98 @@ export async function cancelQueuedSignature(
         await idbDelete(e.entryId);
       }
     }
+    void notifyQueueListeners();
   } catch {
     // best-effort
   }
 }
 
 // ── Flush ────────────────────────────────────────────────
-// Sube todas las fotos pendientes en la cola (IndexedDB + cola legacy).
-export async function flushPhotoQueue(): Promise<void> {
+// Un solo flush a la vez: `enqueuePhoto`, el listener de `online` y el reintento
+// manual pueden dispararlo casi simultáneamente, y dos recorridos en paralelo
+// sobre la misma cola se pisan (doble arrayUnion, doble delete).
+// Tope de espera del ACK de Firestore dentro del flush. Con
+// `persistentLocalCache` la promesa de `updateDoc` no resuelve hasta que el
+// servidor confirma, así que si la señal se corta en mitad del flush esperarla
+// colgaría la cola para siempre — justo el síntoma que este arreglo elimina.
+const FIRESTORE_ACK_TIMEOUT_MS = 20_000;
+
+const ACK_TIMEOUT_CODE = 'firestore/timeout';
+
+/**
+ * Confirma —de forma idempotente y esperable— que el `PhotoRef` pending puede
+ * existir en Firestore, ANTES de subir el binario a Storage.
+ *
+ * Sin este paso las dos autorizaciones corrían sueltas: `enqueuePhoto` disparaba
+ * el write sin esperarlo (para no colgar la captura sin señal) y el flush subía
+ * el archivo en paralelo. Si Firestore rechazaba el ref de forma permanente, el
+ * objeto ya estaba escrito en Storage — y con `allow delete: if false` la app no
+ * tiene manera de borrarlo. El caso no es teórico: `firestore.rules` deniega
+ * toda escritura en un proyecto `archivado`, condición que `storage.rules` no
+ * mira, así que Firestore rechaza y Storage acepta.
+ *
+ * `arrayUnion` con el mismo elemento es un no-op, y reescribir el campo escalar
+ * de una firma con el mismo valor también, así que repetirlo es seguro.
+ */
+async function ensurePendingRef(entry: QueueEntry): Promise<void> {
+  const db = getFirebaseDb();
+  const docRef = doc(db, 'projects', entry.projectCode, 'documents', entry.docType);
+  await withAckTimeout(entry.signatureField
+    ? updateDoc(docRef, { [entry.signatureField]: entry.photoRef, ...auditFields() })
+    : updateDoc(docRef, { registroFotografico: arrayUnion(entry.photoRef), ...auditFields() }));
+}
+
+/**
+ * Le pone techo a la espera de un ACK de Firestore dentro del flush.
+ *
+ * Se aplica a TODAS las escrituras del flush, no solo a la confirmación previa:
+ * si la señal se corta justo después de subir el binario, la escritura de
+ * `pending: false` tampoco resuelve, y sin techo el `inFlight` del flush queda
+ * trabado para siempre — lo que congela la cola entera durante toda la sesión,
+ * porque cada flush posterior devuelve esa misma promesa colgada. El reintento
+ * es seguro: la subida usa el mismo path y `arrayRemove`/`arrayUnion` son
+ * idempotentes.
+ */
+function withAckTimeout<T>(write: Promise<T>): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const guard = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(Object.assign(new Error('ack timeout'), { code: ACK_TIMEOUT_CODE })),
+      FIRESTORE_ACK_TIMEOUT_MS,
+    );
+  });
+  return Promise.race([write, guard]).finally(() => { if (timer) clearTimeout(timer); });
+}
+
+let inFlight: Promise<void> | null = null;
+let rerun = false;
+
+/**
+ * Sube todas las fotos pendientes en la cola (IndexedDB + cola legacy).
+ *
+ * Si ya hay un flush en curso no se descarta la llamada: se encadena otra
+ * pasada al final. Descartarla dejaba un agujero — `retryPhotoUpload()` limpia
+ * la marca de error y pide un flush, pero si en ese momento había uno corriendo
+ * (que ya había leído la cola sin esa entrada) el reintento no se ejecutaba
+ * nunca y la foto se quedaba pendiente en silencio: el mismo síntoma que este
+ * arreglo viene a eliminar.
+ */
+export function flushPhotoQueue(): Promise<void> {
+  if (inFlight) {
+    rerun = true;
+    return inFlight;
+  }
+  inFlight = runFlush()
+    .finally(() => { inFlight = null; })
+    .then(() => {
+      if (!rerun) return;
+      rerun = false;
+      return flushPhotoQueue();
+    });
+  return inFlight;
+}
+
+async function runFlush(): Promise<void> {
   await drainLegacyQueue();
 
   let entries: QueueEntry[];
@@ -248,11 +531,20 @@ export async function flushPhotoQueue(): Promise<void> {
 
   const storage = getFirebaseStorage();
   const db = getFirebaseDb();
+  let changed = false;
 
   for (const entry of entries) {
+    // Un fallo permanente ya marcado no se reintenta solo: espera a que el
+    // usuario reintente o elimine la foto. Es lo que evita el loop infinito.
+    if (entry.failed) continue;
+
     try {
+      // Primero el permiso de Firestore, después el binario. El orden importa:
+      // un objeto en Storage no se puede borrar desde la app.
+      await ensurePendingRef(entry);
+
       const storageRef = ref(storage, entry.photoRef.storagePath);
-      await uploadBytes(storageRef, entry.blob, { contentType: entry.blob.type || 'image/jpeg' });
+      await uploadBytes(storageRef, entry.blob, { contentType: entry.blob.type });
 
       const uploaded: PhotoRef = {
         id: entry.photoRef.id,
@@ -267,27 +559,56 @@ export async function flushPhotoQueue(): Promise<void> {
 
       if (entry.signatureField) {
         // Firma escalar: reemplazar el campo directamente
-        await updateDoc(docRef, {
+        await withAckTimeout(updateDoc(docRef, {
           [entry.signatureField]: uploaded,
           ...auditFields(),
-        });
+        }));
       } else {
         // Array de fotos: quitar la pendiente y agregar la subida
-        await updateDoc(docRef, {
+        await withAckTimeout(updateDoc(docRef, {
           registroFotografico: arrayRemove(entry.photoRef),
           ...auditFields(),
-        });
-        await updateDoc(docRef, {
+        }));
+        await withAckTimeout(updateDoc(docRef, {
           registroFotografico: arrayUnion(uploaded),
           ...auditFields(),
-        });
+        }));
       }
 
       await idbDelete(entry.entryId);
-    } catch {
-      // queda en la cola; se reintenta en el próximo flush/online
+      changed = true;
+    } catch (e) {
+      const failure = classifyUploadError(e);
+      // Los intentos solo se cuentan cuando hubo respuesta del servidor: estar
+      // offline no debe consumir el presupuesto de reintentos.
+      // Ni estar offline ni quedarse sin ACK son un rechazo del servidor: no
+      // deben gastar el presupuesto de reintentos ni convertirse en error.
+      const noSignal = failure.code === 'offline' || failure.code === ACK_TIMEOUT_CODE;
+      const attempts = noSignal ? (entry.attempts ?? 0) : (entry.attempts ?? 0) + 1;
+      const exhausted = failure.kind === 'transient' && attempts >= MAX_ATTEMPTS;
+      logFailure(entry, failure, attempts);
+
+      const next: QueueEntry = { ...entry, attempts };
+      if (failure.kind === 'permanent') {
+        next.failed = { code: failure.code, message: failure.message, at: Date.now() };
+      } else if (exhausted) {
+        next.failed = {
+          code: `${failure.code}/agotado`,
+          message: 'No pudimos subir esta imagen después de varios intentos. Reintentá o eliminala.',
+          at: Date.now(),
+        };
+      }
+      try {
+        await idbPut(next);
+        changed = true;
+      } catch {
+        // Si ni siquiera se puede anotar el fallo, la entrada queda como estaba
+        // y se reintenta en el próximo flush. No se pierde la foto.
+      }
     }
   }
+
+  if (changed) await notifyQueueListeners();
 }
 
 // Migra (una sola vez) las entradas que hayan quedado en la cola vieja de
@@ -323,9 +644,9 @@ async function drainLegacyQueue(): Promise<void> {
 
 // Inicia el flush cuando la conexión se recupera.
 export function initPhotoQueueListener(): () => void {
-  const handler = () => flushPhotoQueue();
+  const handler = () => { void flushPhotoQueue(); };
   window.addEventListener('online', handler);
-  if (navigator.onLine) flushPhotoQueue();
+  if (navigator.onLine) void flushPhotoQueue();
   return () => window.removeEventListener('online', handler);
 }
 

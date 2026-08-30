@@ -7,7 +7,8 @@ import { setDocStatus, saveDoc, reopenDoc } from '@/lib/repo/projects';
 import { pendingUploadsError } from '@/lib/pendingUploads';
 import { isReopenable } from '@/lib/docLifecycle';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
-import { enqueueSignature, cancelQueuedSignature, getPhotoUrl } from '@/lib/photos';
+import { enqueueSignature, cancelQueuedSignature, getPhotoUrl, retryPhotoUpload } from '@/lib/photos';
+import { usePhotoQueue } from '@/lib/usePhotoQueue';
 import { sequencingError } from '@/lib/sequencing';
 import SignaturePad from '@/components/SignaturePad';
 import { Section } from '@/components/docs/Section';
@@ -41,6 +42,9 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
   const [reopening, setReopening] = useState(false);
   const [lockErrors, setLockErrors] = useState<string[]>([]);
   const [signError, setSignError] = useState<string | null>(null);
+  // #P1 — Una firma rechazada por Storage queda `pending: true` igual que una en
+  // camino. La cola local es lo único que distingue los dos casos.
+  const photoQueue = usePhotoQueue();
   // #22 — Una vez que el cliente firma, el contenido del acta queda congelado:
   // no admite edición hasta la firma final (o hasta descartar la firma). Si la
   // página se recarga con una firma de cliente ya persistida, se reconstruye.
@@ -175,6 +179,17 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
   // ── Firma remota ────────────────────────────────────────
   // El server mantiene remoteSign en el doc AC: acá solo se dispara la API y
   // la suscripción en vivo refleja el estado (link activo / vencido / firmado).
+  // Firmas encoladas cuyo upload falló de forma permanente.
+  const signatureFailures = ([
+    ['del cliente', firmaClienteStored],
+    ['de COTA CERO', firmaCotaCeroStored],
+  ] as const).flatMap(([label, stored]) => {
+    const item = stored ? photoQueue.get(stored.id) : undefined;
+    return item?.state === 'error'
+      ? [{ label, photoId: item.photoId, message: item.message ?? 'No se pudo subir.' }]
+      : [];
+  });
+
   const remoteSign = liveAC?.remoteSign ?? seedDoc?.remoteSign ?? null;
   const remoteActive = !!remoteSign && remoteSign.expiresAt > Date.now();
   const remoteExpired = !!remoteSign && remoteSign.expiresAt <= Date.now();
@@ -293,7 +308,7 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
     if (seqErr) errs.push(seqErr);
     // #P0-4 — El acta no se firma con la firma del cliente (ni ninguna otra
     // imagen) a medio subir: quedaría congelada como pendiente para siempre.
-    const pendingErr = pendingUploadsError({ live: liveAC, base });
+    const pendingErr = pendingUploadsError({ live: liveAC, base }, photoQueue);
     if (pendingErr) errs.push(pendingErr);
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
@@ -530,6 +545,14 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
           {signError && (
             <p className="text-[12px] text-red-500">{signError}</p>
           )}
+          {signatureFailures.map(({ label, photoId, message }) => (
+            <p key={photoId} className="text-[12px] text-red-500">
+              Error al subir la firma {label}: {message}{' '}
+              <button type="button" onClick={() => { void retryPhotoUpload(photoId); }} className="underline font-semibold">
+                Reintentar
+              </button>
+            </p>
+          ))}
           <button type="button" onClick={handleSign} disabled={locking}
             className="w-full text-white font-bold text-[11px] uppercase tracking-[0.24em] rounded-md py-3.5 disabled:opacity-50 transition-colors" style={{ background: '#C38A5A' }}>
             {locking ? 'Firmando…' : 'Firmar acta de conformidad'}

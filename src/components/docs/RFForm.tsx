@@ -7,7 +7,8 @@ import { setDocStatus, reopenDoc } from '@/lib/repo/projects';
 import { pendingUploadsError } from '@/lib/pendingUploads';
 import { sequencingError } from '@/lib/sequencing';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
-import { enqueuePhoto, removePhotoFromDoc } from '@/lib/photos';
+import { enqueuePhoto, removePhotoFromDoc, retryPhotoUpload } from '@/lib/photos';
+import { usePhotoQueue } from '@/lib/usePhotoQueue';
 import PhotoThumb from '@/components/docs/PhotoThumb';
 import { Section } from '@/components/docs/Section';
 import { SectionNav } from '@/components/docs/SectionNav';
@@ -47,6 +48,8 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
   const [lockErrors, setLockErrors] = useState<string[]>([]);
   const { confirmOpen, confirmMessage, confirmDanger, openConfirm, onConfirm, onCancel } = useConfirm();
   const [photoPreviews, setPhotoPreviews] = useState<Map<string, string>>(new Map());
+  // Estado real de la cola local: separa "pendiente" de "error al subir".
+  const photoQueue = usePhotoQueue();
   const [photoError, setPhotoError] = useState<string | null>(null);
   const { template, loading: tplLoading } = useProtocolTemplate();
   const seededRef = useRef(false);
@@ -112,7 +115,7 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
     const seqErr = sequencingError('RF', 'firmado', project.docStatus, upstream);
     if (seqErr) errs.push(seqErr);
     // #P0-4 — Las fotos vivas son las que se van a congelar en el snapshot.
-    const pendingErr = pendingUploadsError(liveDoc ?? values);
+    const pendingErr = pendingUploadsError(liveDoc ?? values, photoQueue);
     if (pendingErr) errs.push(pendingErr);
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
@@ -144,6 +147,9 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
 
   async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    // El input se limpia siempre: si no, volver a elegir el mismo archivo tras
+    // un error no dispara `change` y la foto parece no reaccionar.
+    e.target.value = '';
     if (!file || !user) return;
     setPhotoError(null);
     try {
@@ -284,6 +290,8 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
               key={p.id}
               photo={p}
               localBlob={photoPreviews.get(p.id) ?? null}
+              queueItem={photoQueue.get(p.id)}
+              onRetry={photoQueue.get(p.id)?.state === 'error' ? () => { void retryPhotoUpload(p.id); } : undefined}
               onRemove={isLocked ? undefined : () => removePhoto(p.id)}
             />
           ))}

@@ -6,7 +6,8 @@ import { useDoc, offlineLockError } from '@/hooks/useDoc';
 import { setDocStatus, reopenDoc } from '@/lib/repo/projects';
 import { pendingUploadsError } from '@/lib/pendingUploads';
 import { buildLockedSnapshot } from '@/lib/inheritance';
-import { enqueuePhoto, removePhotoFromDoc } from '@/lib/photos';
+import { enqueuePhoto, removePhotoFromDoc, retryPhotoUpload } from '@/lib/photos';
+import { usePhotoQueue } from '@/lib/usePhotoQueue';
 import PhotoThumb from '@/components/docs/PhotoThumb';
 import { Section } from '@/components/docs/Section';
 import { SectionNav } from '@/components/docs/SectionNav';
@@ -113,6 +114,8 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
   const seededRef = useRef(false);
   // Preview local de fotos: Map<id, objectURL>. No se persiste en RHF ni Firestore.
   const [photoPreviews, setPhotoPreviews] = useState<Map<string, string>>(new Map());
+  // Estado real de la cola local: separa "pendiente" de "error al subir".
+  const photoQueue = usePhotoQueue();
   const [photoError, setPhotoError] = useState<string | null>(null);
 
   const { register, control, watch, getValues, setValue, reset } = useForm<DocVT>({
@@ -187,7 +190,7 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
     if (!values.materialSoporte) errs.push('Material del soporte requerido');
     if (!values.dictamen) errs.push('Dictamen requerido');
     // #P0-4 — Las fotos vivas son las que se van a congelar en el snapshot.
-    const pendingErr = pendingUploadsError(liveDoc ?? values);
+    const pendingErr = pendingUploadsError(liveDoc ?? values, photoQueue);
     if (pendingErr) errs.push(pendingErr);
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
@@ -230,6 +233,9 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
 
   async function handlePhoto(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
+    // El input se limpia siempre: si no, volver a elegir el mismo archivo tras
+    // un error no dispara `change` y la foto parece no reaccionar.
+    e.target.value = '';
     if (!file || !user) return;
     setPhotoError(null);
     try {
@@ -443,6 +449,8 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
               key={p.id}
               photo={p}
               localBlob={photoPreviews.get(p.id) ?? null}
+              queueItem={photoQueue.get(p.id)}
+              onRetry={photoQueue.get(p.id)?.state === 'error' ? () => { void retryPhotoUpload(p.id); } : undefined}
               onRemove={isLocked ? undefined : () => removePhoto(p.id)}
             />
           ))}
