@@ -107,6 +107,11 @@ export default function ProjectOverviewPage({
 
   const isArchived = project.status === 'archivado';
   const legajoFinal = isLegajoFinal(project.docStatus);
+  // #P0-1 — Pista de UI, no una autorización: docStatus es el espejo
+  // denormalizado y no conoce RF.aptoEntrega, así que puede sobreestimar. Solo
+  // decide el rótulo del link; quién decide si hay entregable final es el
+  // servidor, sobre los documentos reales.
+  const entregableFinal = project.docStatus?.AC === 'firmado';
 
   async function handleArchive() {
     if (!project) return;
@@ -412,14 +417,20 @@ export default function ProjectOverviewPage({
         </div>
       </div>
 
-      {/* Entregable cliente PDF */}
+      {/* Entregable cliente PDF — #P0-1: el rótulo no puede prometer un
+          entregable definitivo cuando el acta todavía no está firmada. La
+          autoridad sigue siendo el servidor (/api/deliverable), que rotula la
+          portada como BORRADOR y esconde la acción de WhatsApp; esto solo evita
+          ofrecer "Entregable cliente" como si el documento final ya existiera. */}
       <Link
         href={`/print/${project.code}/entregable`}
         target="_blank"
-        className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] rounded-md py-3 text-white transition-colors"
-        style={{ background: '#C38A5A' }}
+        className="block w-full text-center text-[11px] font-bold uppercase tracking-[0.22em] rounded-md py-3 transition-colors"
+        style={entregableFinal
+          ? { background: '#C38A5A', color: '#FFFFFF' }
+          : { background: 'transparent', color: '#8F5B33', border: '1px solid rgba(195,138,90,0.35)' }}
       >
-        Entregable cliente · PDF
+        {entregableFinal ? 'Entregable cliente · PDF' : 'Vista previa entregable · PDF'}
       </Link>
 
       {/* Legajo PDF */}

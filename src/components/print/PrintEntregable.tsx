@@ -6,6 +6,7 @@ import { buildLockedSnapshot } from '@/lib/inheritance';
 import type { Project, Client, DocType, AnyDoc } from '@/schemas';
 import { FM_DEFAULTS_BY_TIPO } from '@/schemas';
 import { formatMaterialForClient } from '@/lib/material';
+import { evaluateDeliverable, DRAFT_NOTICE, type DeliverableGate } from '@/lib/deliverable';
 import { Body, DocumentFrame, type Snapshot } from './PrintDocument';
 import { MaintenanceGuide } from './MaintenanceGuide';
 import { PrintBrandLogo } from './PrintBrandLogo';
@@ -20,6 +21,7 @@ interface DeliverablePayload {
   project: Project;
   documents: Partial<Record<DocType, AnyDoc>>;
   client: Client | null;
+  deliverable?: DeliverableGate;
 }
 
 // Entregable premium para el cliente: portada + Acta de Conformidad + Ficha de
@@ -32,6 +34,9 @@ export default function PrintEntregable({ code }: Props) {
   const [docs, setDocs] = useState<Partial<Record<DocType, AnyDoc>>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<LoadError>(null);
+  // #P0-1 — Arranca en false: hasta que el servidor confirme que la obra tiene
+  // entregable final, todo lo que se renderiza es borrador.
+  const [isFinal, setIsFinal] = useState(false);
 
   useEffect(() => {
     if (authLoading) return;
@@ -43,7 +48,12 @@ export default function PrintEntregable({ code }: Props) {
         setLoading(true);
         setError(null);
         const token = await user.getIdToken();
-        let res = await fetch(`/api/deliverable/${encodeURIComponent(code)}`, {
+        // Se pide siempre en modo preview: la ruta sin `preview=1` niega el
+        // payload cuando la obra no está en condiciones, y acá queremos poder
+        // mostrar el borrador rotulado. Quién decide si es final sigue siendo
+        // el servidor, vía `payload.deliverable`.
+        const url = `/api/deliverable/${encodeURIComponent(code)}?preview=1`;
+        let res = await fetch(url, {
           headers: { Authorization: `Bearer ${token}` },
           cache: 'no-store',
         });
@@ -52,7 +62,7 @@ export default function PrintEntregable({ code }: Props) {
         // unos milisegundos. Renovarlo una vez evita un falso error de carga.
         if (res.status === 401) {
           const refreshedToken = await user.getIdToken(true);
-          res = await fetch(`/api/deliverable/${encodeURIComponent(code)}`, {
+          res = await fetch(url, {
             headers: { Authorization: `Bearer ${refreshedToken}` },
             cache: 'no-store',
           });
@@ -67,6 +77,12 @@ export default function PrintEntregable({ code }: Props) {
         setProject(payload.project);
         setDocs(payload.documents);
         setClient(payload.client);
+        // Doble capa: el veredicto del servidor Y el recalculado acá sobre los
+        // mismos documentos. Si alguno dice que no es final, es borrador.
+        setIsFinal(
+          payload.deliverable?.final === true
+          && evaluateDeliverable(payload.documents).final,
+        );
       } catch (loadError) {
         console.error('[PrintEntregable]', loadError);
         if (alive) setError('load');
@@ -121,23 +137,23 @@ export default function PrintEntregable({ code }: Props) {
 
   return (
     <div className="print-shell">
-      <DeliverableCover project={project} />
+      <DeliverableCover project={project} final={isFinal} />
 
-      <DeliverableDocPage title="Acta de Conformidad" project={project} docCode="AC">
+      <DeliverableDocPage title="Acta de Conformidad" project={project} docCode="AC" final={isFinal}>
         <Body docType="AC" project={project} s={snapFor('AC')} clientFacing />
       </DeliverableDocPage>
 
-      <DeliverableDocPage title="Ficha de Mantenimiento" project={project} docCode="FM" last>
+      <DeliverableDocPage title="Ficha de Mantenimiento" project={project} docCode="FM" final={isFinal} last>
         <MaintenanceGuide project={project} snapshot={fmSnapshot} />
       </DeliverableDocPage>
 
-      <Actions project={project} client={client} />
+      <Actions project={project} client={client} final={isFinal} />
     </div>
   );
 }
 
 // ── Portada ──────────────────────────────────────────────────
-export function DeliverableCover({ project }: { project: Project }) {
+export function DeliverableCover({ project, final }: { project: Project; final: boolean }) {
   return (
     <div className="print-page deliverable-cover print-color">
       <div className="deliverable-cover-top">
@@ -155,10 +171,23 @@ export function DeliverableCover({ project }: { project: Project }) {
         <blockquote>La superficie bien resuelta empieza antes de colocar.</blockquote>
       </main>
 
-      <div className="deliverable-cover-status">
-        <span aria-hidden>✓</span>
-        <strong>Apto para entrega</strong>
-      </div>
+      {/* #P0-1 — El sello de "apto" ya no es fijo: solo aparece cuando la RF
+          está cerrada y apta Y el acta está firmada. En cualquier otro caso el
+          documento se rotula como borrador sin valor de entrega. */}
+      {final ? (
+        <div className="deliverable-cover-status">
+          <span aria-hidden>✓</span>
+          <strong>Apto para entrega</strong>
+        </div>
+      ) : (
+        <div
+          className="deliverable-cover-status"
+          style={{ background: '#8A2B2B', color: '#FFFFFF', borderColor: '#8A2B2B' }}
+        >
+          <span aria-hidden>!</span>
+          <strong>{DRAFT_NOTICE}</strong>
+        </div>
+      )}
 
       <div className="deliverable-cover-meta">
         <Row label="Proyecto" value={project.clienteNombre} />
@@ -182,8 +211,9 @@ function Row({ label, value }: { label: string; value: string }) {
 }
 
 // ── Página de documento (branded, sin metadatos internos) ────
-export function DeliverableDocPage({ title, project, docCode, last, children }: {
-  title: string; project: Project; docCode: 'AC' | 'FM'; last?: boolean; children: React.ReactNode;
+export function DeliverableDocPage({ title, project, docCode, final, last, children }: {
+  title: string; project: Project; docCode: 'AC' | 'FM'; final: boolean;
+  last?: boolean; children: React.ReactNode;
 }) {
   return (
     <section className={`print-page print-flow-page deliverable-document ${last ? 'is-last' : ''}`}>
@@ -197,11 +227,16 @@ export function DeliverableDocPage({ title, project, docCode, last, children }: 
         footer={(
           <footer className="deliverable-doc-footer">
             <span>{project.code} · COTA CERO - Protocolo de obra</span>
-            <span>Documento de entrega</span>
+            <span>{final ? 'Documento de entrega' : DRAFT_NOTICE}</span>
           </footer>
         )}
       >
         <div className="deliverable-doc-title">
+          {!final && (
+            <p style={{ color: '#8A2B2B', fontWeight: 700, letterSpacing: '0.14em' }}>
+              {DRAFT_NOTICE}
+            </p>
+          )}
           <p>Documento de entrega · {docCode}</p>
           <h1>{title}</h1>
         </div>
@@ -216,7 +251,7 @@ function humanize(value: string): string {
 }
 
 // ── Acciones (pantalla) ──────────────────────────────────────
-function Actions({ project, client }: { project: Project; client: Client | null }) {
+function Actions({ project, client, final }: { project: Project; client: Client | null; final: boolean }) {
   const phone = (client?.telefono ?? '').replace(/\D/g, '');
   const msg = encodeURIComponent(
     `Hola ${project.clienteNombre}, te compartimos la documentación de entrega de tu obra (${project.code}). ¡Gracias por confiar en COTA·CERO!`,
@@ -224,15 +259,26 @@ function Actions({ project, client }: { project: Project; client: Client | null 
   const waHref = phone ? `https://wa.me/${phone}?text=${msg}` : `https://wa.me/?text=${msg}`;
 
   return (
-    <div className="no-print fixed bottom-5 right-5 flex gap-2">
-      <a
-        href={waHref}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="bg-[#1A1B1D] text-[#F5F2ED] font-semibold rounded-md px-5 py-3 text-sm shadow-lg border border-[#C38A5A]/40"
-      >
-        WhatsApp al cliente
-      </a>
+    <div className="no-print fixed bottom-5 right-5 flex items-center gap-2">
+      {/* #P0-1 — Sin entregable final no se ofrece mandárselo al cliente: la
+          acción de WhatsApp presentaría el borrador como documento terminado. */}
+      {final ? (
+        <a
+          href={waHref}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="bg-[#1A1B1D] text-[#F5F2ED] font-semibold rounded-md px-5 py-3 text-sm shadow-lg border border-[#C38A5A]/40"
+        >
+          WhatsApp al cliente
+        </a>
+      ) : (
+        <span
+          className="rounded-md px-5 py-3 text-sm font-semibold shadow-lg"
+          style={{ background: '#8A2B2B', color: '#FFFFFF' }}
+        >
+          {DRAFT_NOTICE}
+        </span>
+      )}
       <button
         type="button"
         onClick={() => window.print()}
