@@ -53,3 +53,9 @@ scripts/tmp-*
 
 .vercel
 .env*
+
+# Logs de los emuladores de Firebase (test:rules:emu)
+firestore-debug.log
+storage-debug.log
+ui-debug.log
+firebase-debug.log

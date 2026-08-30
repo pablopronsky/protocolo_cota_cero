@@ -12,19 +12,85 @@ service firebase.storage {
               && docType in ['VT', 'EP', 'OT', 'RF']);
     }
 
+    // Forma del path/objeto. Idéntico a lo que ya se exigía; se conserva tal cual.
+    function validPath(code, docType, fileName) {
+      return code.matches('COTA-[0-9]{4}-[0-9]{4}')
+          && docType in ['VT', 'EP', 'OT', 'RF', 'AC', 'FM']
+          && fileName.matches('[A-Za-z0-9_-]{1,64}[.](jpg|jpeg|png|webp)');
+    }
+
+    function validUpload() {
+      return request.resource != null
+          && request.resource.size < 10 * 1024 * 1024
+          && request.resource.contentType.matches('image/(jpeg|png|webp)');
+    }
+
+    // #P0-4 — Inmutabilidad real del lockedSnapshot.
+    //
+    // Firestore congela el `storagePath` dentro de `lockedSnapshot`, pero eso no
+    // sirve de nada si el binario que hay detrás de ese path se puede pisar o
+    // borrar después. Estas reglas consultan el estado real del documento en
+    // Firestore (regla cross-service) para que un archivo perteneciente a un
+    // documento `completo`/`firmado` no se pueda reemplazar ni eliminar.
+    //
+    // Costo: 1 lectura de Firestore por escritura de archivo. Es el mismo orden
+    // de magnitud que `projectArchived()` en firestore.rules y solo se paga al
+    // subir, no al leer.
+    //
+    // Fail-closed: si el documento no existe, la escritura se rechaza. Los 6
+    // documentos los crea `initEmptyDocs` al crear el proyecto, así que en el
+    // flujo real siempre existen.
+    function docPath(code, docType) {
+      return /databases/(default)/documents/projects/$(code)/documents/$(docType);
+    }
+    function docIsOpen(code, docType) {
+      return firestore.exists(docPath(code, docType))
+          && !(firestore.get(docPath(code, docType)).data.status in ['completo', 'firmado']);
+    }
+
+    // #P0-4 — Con el acta firmada, el legajo entero queda congelado.
+    //
+    // `docIsOpen` protege cada archivo contra el documento que le da nombre en
+    // el path, pero el path lo elige quien escribe el PhotoRef en Firestore: un
+    // escritor directo puede guardar la firma del acta —o una foto de una VT ya
+    // cerrada— bajo el docType de un documento que todavía está abierto, y
+    // sustituir el JPEG después. Una vez firmada el acta ningún archivo del
+    // proyecto tiene por qué cambiar (FM no lleva imágenes), así que se cierra
+    // la escritura para todo el proyecto y esa vía desaparece.
+    function actaFirmada(code) {
+      return firestore.exists(docPath(code, 'AC'))
+          && firestore.get(docPath(code, 'AC')).data.status == 'firmado';
+    }
+
     match /projects/{code}/{docType}/{fileName} {
       allow read: if hasAppRole()
-                  && code.matches('COTA-[0-9]{4}-[0-9]{4}')
-                  && docType in ['VT', 'EP', 'OT', 'RF', 'AC', 'FM']
-                  && fileName.matches('[A-Za-z0-9_-]{1,64}[.](jpg|jpeg|png|webp)');
-      allow write: if hasAppRole()
-                   && canWriteDoc(docType)
-                   && code.matches('COTA-[0-9]{4}-[0-9]{4}')
-                   && docType in ['VT', 'EP', 'OT', 'RF', 'AC', 'FM']
-                   && fileName.matches('[A-Za-z0-9_-]{1,64}[.](jpg|jpeg|png|webp)')
-                   && request.resource != null
-                   && request.resource.size < 10 * 1024 * 1024
-                   && request.resource.contentType.matches('image/(jpeg|png|webp)');
+                  && validPath(code, docType, fileName);
+
+      // Alta de un archivo nuevo: permitida solo mientras el documento está
+      // abierto. Es el flujo normal de captura de fotos y firmas.
+      allow create: if hasAppRole()
+                    && canWriteDoc(docType)
+                    && validPath(code, docType, fileName)
+                    && validUpload()
+                    && docIsOpen(code, docType)
+                    && !actaFirmada(code);
+
+      // Sobrescritura: la app nunca reutiliza un path (cada captura es un UUID
+      // nuevo), pero `flushPhotoQueue()` puede reintentar una subida cuyo
+      // `updateDoc` posterior falló, y ese reintento pisa el mismo objeto. Se
+      // permite solo con el documento abierto; una vez cerrado, jamás.
+      allow update: if hasAppRole()
+                    && canWriteDoc(docType)
+                    && validPath(code, docType, fileName)
+                    && validUpload()
+                    && docIsOpen(code, docType)
+                    && !actaFirmada(code);
+
+      // La aplicación nunca borra objetos de Storage: `removePhotoFromDoc()`
+      // solo quita la referencia en Firestore. Denegar el delete por completo
+      // cierra la vía más directa para vaciar un legajo ya cerrado, al precio
+      // de dejar objetos huérfanos (que ya quedaban igual).
+      allow delete: if false;
     }
   }
 }

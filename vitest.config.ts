@@ -11,5 +11,9 @@ export default defineConfig({
     // Give the Firebase emulator time to respond on first connect.
     hookTimeout: 30_000,
     testTimeout: 30_000,
+    // Los suites de reglas comparten el mismo proyecto del emulador (lo exige
+    // el `firestore.get()` cross-service de storage.rules) y cada uno limpia la
+    // base entre tests. En paralelo se pisarían entre archivos.
+    fileParallelism: false,
   },
 });
