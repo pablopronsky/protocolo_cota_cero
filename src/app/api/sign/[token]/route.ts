@@ -4,7 +4,8 @@ import { randomUUID } from 'crypto';
 import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminDb, getAdminBucket } from '@/lib/firebase/admin';
 import { SubmitSignatureInput, SIGN_TOKEN_RE } from '@/schemas/inputs';
-import type { SignRequest, DocAC, DocOT, Project, PhotoRef } from '@/schemas';
+import { signEligibilityError } from '@/lib/signEligibility';
+import type { SignRequest, DocAC, DocOT, DocType, AnyDoc, Project, PhotoRef } from '@/schemas';
 
 // Endpoints PÚBLICOS (el cliente no tiene cuenta): la autorización es el token
 // impredecible de la URL, con vencimiento y un solo uso. Todo pasa por el
@@ -31,6 +32,16 @@ async function loadValidRequest(token: string): Promise<SignRequest> {
   return r;
 }
 
+// La elegibilidad se evalúa sobre los documentos reales, así que hace falta la
+// colección entera y no solo el AC.
+function toDocumentMap(
+  snap: FirebaseFirestore.QuerySnapshot,
+): Partial<Record<DocType, AnyDoc>> {
+  const documents: Partial<Record<DocType, AnyDoc>> = {};
+  for (const d of snap.docs) documents[d.id as DocType] = d.data() as AnyDoc;
+  return documents;
+}
+
 function errorResponse(err: unknown) {
   if (err instanceof SignError) {
     return response({ error: err.message }, err.status);
@@ -52,24 +63,29 @@ export async function GET(
     const r = await loadValidRequest(token);
     const db = getAdminDb();
 
-    const [projSnap, otSnap, acSnap] = await Promise.all([
+    const [projSnap, documentsSnap] = await Promise.all([
       db.doc(`projects/${r.projectCode}`).get(),
-      db.doc(`projects/${r.projectCode}/documents/OT`).get(),
-      db.doc(`projects/${r.projectCode}/documents/AC`).get(),
+      db.collection(`projects/${r.projectCode}/documents`).get(),
     ]);
     if (!projSnap.exists) throw new SignError(404, 'Link inválido');
     const project = projSnap.data() as Project;
-    const ac = acSnap.exists ? (acSnap.data() as DocAC) : null;
+    const documents = toDocumentMap(documentsSnap);
+    const ac = documents.AC as DocAC | undefined;
     if (ac && (ac.status === 'firmado' || ac.firmaCliente?.firma)) {
       throw new SignError(410, 'Esta acta ya fue firmada. ¡Gracias!');
     }
+    // #P0-5 — Lo que era cierto al emitir el link puede haber dejado de serlo.
+    // Si la obra ya no está en condiciones, no se le pide la firma al cliente.
+    const notEligible = signEligibilityError(project, documents);
+    if (notEligible) throw new SignError(409, notEligible);
+    const otDoc = documents.OT as DocOT | undefined;
 
     const d = project.domicilioObra;
     return response({
       projectCode: project.code,
       clienteNombre: project.clienteNombre,
       domicilio: `${d.calle} ${d.numero}, ${d.localidad}`,
-      obraEjecutada: otSnap.exists ? ((otSnap.data() as DocOT).alcance ?? '') : '',
+      obraEjecutada: otDoc?.alcance ?? '',
       materialTipo: project.materialInstalado.tipo,
       materialDescripcion: project.materialInstalado.descripcion,
     });
@@ -128,6 +144,7 @@ export async function POST(
     const reqRef = db.doc(`signRequests/${token}`);
     const acRef = db.doc(`projects/${r.projectCode}/documents/AC`);
     const projRef = db.doc(`projects/${r.projectCode}`);
+    const documentsRef = db.collection(`projects/${r.projectCode}/documents`);
     const pendingQuery = db.collection('signRequests')
       .where('projectCode', '==', r.projectCode)
       .where('status', '==', 'pending');
@@ -135,8 +152,8 @@ export async function POST(
     await db.runTransaction(async (tx) => {
       // Revalidar DENTRO de la transacción: un solo uso, sin carreras entre
       // dos envíos simultáneos o contra una firma presencial.
-      const [reqSnap, acSnap, projSnap, pendingSnap] = await Promise.all([
-        tx.get(reqRef), tx.get(acRef), tx.get(projRef), tx.get(pendingQuery),
+      const [reqSnap, acSnap, projSnap, documentsSnap, pendingSnap] = await Promise.all([
+        tx.get(reqRef), tx.get(acRef), tx.get(projRef), tx.get(documentsRef), tx.get(pendingQuery),
       ]);
       if (!reqSnap.exists || !acSnap.exists || !projSnap.exists) {
         throw new SignError(404, 'Link inválido');
@@ -150,6 +167,12 @@ export async function POST(
         throw new SignError(409, 'Esta acta ya fue firmada.');
       }
       const project = projSnap.data() as Project;
+      // #P0-5 — Revalidar DENTRO de la transacción, contra los documentos
+      // reales: entre la emisión del link y este POST la RF pudo reabrirse y
+      // marcarse NO apta, o la obra pudo archivarse. El link no es un permiso
+      // permanente para firmar.
+      const notEligible = signEligibilityError(project, toDocumentMap(documentsSnap));
+      if (notEligible) throw new SignError(409, notEligible);
       const now = Date.now();
 
       pendingSnap.docs.forEach((requestDoc) => {

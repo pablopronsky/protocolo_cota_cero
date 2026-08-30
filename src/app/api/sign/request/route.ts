@@ -5,7 +5,8 @@ import { FieldValue } from 'firebase-admin/firestore';
 import { getAdminDb } from '@/lib/firebase/admin';
 import { requireAdmin, HttpError } from '@/lib/auth/requireAuth';
 import { CreateSignRequestInput } from '@/schemas/inputs';
-import type { DocAC, SignRequest } from '@/schemas';
+import { signEligibilityError } from '@/lib/signEligibility';
+import type { AnyDoc, DocAC, DocType, Project, SignRequest } from '@/schemas';
 
 const EXPIRY_DAYS = 7;
 const NO_STORE = { 'Cache-Control': 'private, no-store, max-age=0' };
@@ -21,6 +22,16 @@ function errorResponse(err: unknown) {
   }
   console.error('[sign request]', err);
   return response({ error: 'Error interno' }, 500);
+}
+
+// La elegibilidad se evalúa sobre los documentos reales de la obra, no sobre
+// el espejo `project.docStatus`.
+function toDocumentMap(
+  snap: FirebaseFirestore.QuerySnapshot,
+): Partial<Record<DocType, AnyDoc>> {
+  const documents: Partial<Record<DocType, AnyDoc>> = {};
+  for (const d of snap.docs) documents[d.id as DocType] = d.data() as AnyDoc;
+  return documents;
 }
 
 function activeRequest(requests: SignRequest[], now: number): SignRequest | null {
@@ -44,16 +55,26 @@ export async function POST(req: NextRequest) {
 
     const result = await db.runTransaction(async (tx) => {
       const acRef = db.doc(`projects/${projectCode}/documents/AC`);
+      const projectRef = db.doc(`projects/${projectCode}`);
+      const documentsRef = db.collection(`projects/${projectCode}/documents`);
       const pendingQuery = db.collection('signRequests')
         .where('projectCode', '==', projectCode)
         .where('status', '==', 'pending');
-      const acSnap = await tx.get(acRef);
-      const pendingSnap = await tx.get(pendingQuery);
+      const [projectSnap, documentsSnap, pendingSnap] = await Promise.all([
+        tx.get(projectRef), tx.get(documentsRef), tx.get(pendingQuery),
+      ]);
 
-      if (!acSnap.exists) throw new HttpError(404, 'Acta no encontrada');
-      const ac = acSnap.data() as DocAC;
-      if (ac.status === 'firmado') throw new HttpError(409, 'El acta ya esta firmada');
-      if (ac.firmaCliente?.firma) throw new HttpError(409, 'El acta ya tiene la firma del cliente');
+      if (!projectSnap.exists) throw new HttpError(404, 'Obra no encontrada');
+      const documents = toDocumentMap(documentsSnap);
+      const ac = documents.AC as DocAC | undefined;
+      if (!ac) throw new HttpError(404, 'Acta no encontrada');
+
+      // #P0-5 — No se emite un link de firma para una obra que todavía no está
+      // en condiciones de firmarse: proyecto archivado, protocolo incompleto o
+      // RF no apta. `signEligibilityError` cubre además los dos casos que este
+      // bloque validaba antes (acta ya firmada / con firma del cliente).
+      const notEligible = signEligibilityError(projectSnap.data() as Project, documents);
+      if (notEligible) throw new HttpError(409, notEligible);
 
       const now = Date.now();
       const pending = pendingSnap.docs.map((doc) => doc.data() as SignRequest);

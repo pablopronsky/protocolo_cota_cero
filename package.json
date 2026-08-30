@@ -14,6 +14,8 @@
     "test": "vitest run",
     "test:unit": "vitest run tests/unit",
     "test:rules": "vitest run tests/rules",
+    "test:api": "vitest run tests/api",
+    "test:rules:emu": "firebase emulators:exec --only firestore,storage --project cotacero-test \"npm run test:rules && npm run test:api\"",
     "test:e2e": "playwright test",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage"
