@@ -4,6 +4,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useDoc, offlineLockError } from '@/hooks/useDoc';
 import { setDocStatus, saveDoc, reopenDoc } from '@/lib/repo/projects';
+import { pendingUploadsError } from '@/lib/pendingUploads';
+import { isReopenable } from '@/lib/docLifecycle';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
 import { enqueueSignature, cancelQueuedSignature, getPhotoUrl } from '@/lib/photos';
 import { sequencingError } from '@/lib/sequencing';
@@ -289,6 +291,10 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
     // #21 — el acta no se firma fuera de secuencia ni sobre una RF no apta.
     const seqErr = sequencingError('AC', 'firmado', project.docStatus, upstream);
     if (seqErr) errs.push(seqErr);
+    // #P0-4 — El acta no se firma con la firma del cliente (ni ninguna otra
+    // imagen) a medio subir: quedaría congelada como pendiente para siempre.
+    const pendingErr = pendingUploadsError({ live: liveAC, base });
+    if (pendingErr) errs.push(pendingErr);
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
     if (!await openConfirm('¿Firmar el acta de conformidad? Esta acción es definitiva.')) return;
@@ -342,7 +348,10 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
       {isSigned && (
         <div className="bg-[#2B2D2F] text-[#F5F2ED] rounded-lg px-4 py-3 text-[15px] font-bold uppercase tracking-[0.14em] flex items-center justify-between gap-3 flex-wrap">
           <span>Acta firmada · Documento definitivo</span>
-          {role === 'admin' && (
+          {/* #P0-3 — Sin botón de reapertura: el acta firmada es definitiva.
+              `isReopenable` devuelve false para AC firmado; se deja la llamada
+              en lugar de borrar el bloque para que la razón quede a la vista. */}
+          {role === 'admin' && isReopenable('AC', ac?.status) && (
             <Button variant="danger" size="sm" onClick={handleReopen} disabled={reopening}>
               {reopening ? 'Reabriendo…' : 'Reabrir'}
             </Button>

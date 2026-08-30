@@ -8,6 +8,8 @@ import { getFirebaseAuth, getFirebaseDb } from '../firebase/client';
 import type { Project, ProjectCode, DocType, DocStatus, ProjectStatus, AnyDoc } from '@/schemas';
 import { DOC_ORDER } from '@/schemas';
 import { sequencingError } from '../sequencing';
+import { pendingUploadsError } from '../pendingUploads';
+import { isReopenable, AC_SIGNED_IS_FINAL } from '../docLifecycle';
 
 // Datos que necesita setDocStatus para validar la secuencia del protocolo al
 // cerrar un documento. Los aporta el caller, que ya tiene el Project + upstream
@@ -163,6 +165,16 @@ export async function setDocStatus(
     throw new Error('No se puede cerrar el documento sin snapshot y versión de revisión.');
   }
 
+  // #P0-4 — Nunca cerrar con adjuntos a medio subir. Va acá, en el único camino
+  // de escritura de estado, y no sólo en cada formulario: una vez que el
+  // documento queda bloqueado las reglas rechazan el `updateDoc` de
+  // `flushPhotoQueue()`, así que una referencia `pending` congelada en el
+  // `lockedSnapshot` ya no se puede completar nunca más.
+  if (isClosing) {
+    const pendingErr = pendingUploadsError({ extra, revisionSnapshot });
+    if (pendingErr) throw new Error(pendingErr);
+  }
+
   // Los metadatos autoritativos van al final: un payload de formulario no puede
   // pisar accidentalmente el estado objetivo, la fecha ni el autor del cambio.
   batch.update(docRef, { ...extra, status, updatedAt: now, updatedBy });
@@ -210,6 +222,16 @@ export async function reopenDoc(
 ): Promise<void> {
   const actor = currentUid();
   if (actor !== by) throw new Error('La sesión cambió. Volvé a intentar la reapertura.');
+
+  // #P0-3 — Backstop de cliente. La frontera real es `isReopen()` en
+  // firestore.rules; esto sólo evita gastar un round-trip y da un mensaje
+  // entendible. `snapshot` es el documento vivo que pasan los formularios.
+  const currentStatus = (snapshot as { status?: DocStatus }).status;
+  if (!isReopenable(docType, currentStatus)) {
+    throw new Error(docType === 'AC' && currentStatus === 'firmado'
+      ? AC_SIGNED_IS_FINAL
+      : 'Este documento no se puede reabrir.');
+  }
 
   const batch = writeBatch(db());
   const docRef = doc(db(), 'projects', projectCode, 'documents', docType);

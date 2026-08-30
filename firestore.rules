@@ -13,8 +13,15 @@ service cloud.firestore {
     // #19 — El admin puede reabrir un doc bloqueado, pero SOLO como transición
     // exacta a en_progreso tocando nada más que estos campos (no reedita
     // contenido bloqueado en el mismo write).
-    function isReopen(before, after) {
+    //
+    // #P0-3 — El acta de conformidad FIRMADA queda fuera: la firma del cliente
+    // es el único acto con valor probatorio del protocolo y en esta versión es
+    // irreversible (firmado = definitivo). Los demás documentos conservan la
+    // reapertura, porque para ellos es un circuito previsto y necesario: una RF
+    // firmada como NO apta se corrige reabriéndola.
+    function isReopen(before, after, docType) {
       return locked(before)
+          && !(docType == 'AC' && before.status == 'firmado')
           && after.status == 'en_progreso'
           && after.updatedBy == request.auth.uid
           && after.reopenedBy == request.auth.uid
@@ -29,6 +36,31 @@ service cloud.firestore {
                'status', 'updatedAt', 'updatedBy', 'reopenedAt', 'reopenedBy',
                'lockedSnapshot', 'lockedAt', 'lockedBy', 'version'
              ]);
+    }
+
+    // #P0-3/#P0-4 — El acta solo se firma con una firma del cliente REAL.
+    //
+    // Sin la condición de `pending`, se podía firmar un acta cuya firma todavía
+    // estaba en la cola offline: una vez bloqueado el documento las reglas
+    // rechazan el `updateDoc` de `flushPhotoQueue()`, así que la referencia
+    // pendiente queda congelada para siempre y el acta se imprime sin firma.
+    //
+    // Sin la condición de path, un escritor directo podía apuntar la firma a un
+    // objeto guardado bajo OTRO docType del mismo proyecto (por ejemplo
+    // projects/<code>/FM/x.jpg). Ese documento sigue abierto, así que las
+    // Storage Rules dejarían sobrescribir el JPEG después de firmar: el
+    // lockedSnapshot seguiría apuntando al mismo path con otra imagen detrás.
+    //
+    // Solo se evalúa en la transición a 'firmado'; después el acta es inmutable.
+    function firmaClienteSubida(code, after, docType) {
+      return !(docType == 'AC' && after.status == 'firmado')
+          || (after.firmaCliente.firma is map
+              && after.firmaCliente.firma.get('pending', false) != true
+              && after.firmaCliente.firma.storagePath is string
+              && after.firmaCliente.firma.storagePath.split('/').size() == 4
+              && after.firmaCliente.firma.storagePath.split('/')[0] == 'projects'
+              && after.firmaCliente.firma.storagePath.split('/')[1] == code
+              && after.firmaCliente.firma.storagePath.split('/')[2] == 'AC');
     }
 
     function validDocIdentity(before, after, code, docType) {
@@ -187,8 +219,9 @@ service cloud.firestore {
         allow create, delete: if false;
         allow update: if !projectArchived(code)
                       && validDocIdentity(resource.data, request.resource.data, code, docType)
+                      && firmaClienteSubida(code, request.resource.data, docType)
                       && ((isAdmin()
-                           && (isReopen(resource.data, request.resource.data)
+                           && (isReopen(resource.data, request.resource.data, docType)
                                || (validNormalDocUpdate(resource.data, request.resource.data)
                                    && secuenciaOk(code, docType,
                                                   request.resource.data.status))))

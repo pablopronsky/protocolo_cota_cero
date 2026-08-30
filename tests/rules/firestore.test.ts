@@ -378,9 +378,26 @@ describe('Document access control', () => {
 
   // #19 — la única salida de un doc bloqueado es la transición exacta de
   // reopen (→ en_progreso, tocando solo los campos del batch), y solo admin.
+  // #P0-3 — El acta FIRMADA quedó fuera de esa salida (ver bloque dedicado más
+  // abajo); una RF firmada sí se reabre, es el circuito de corrección de obra.
   it('admin can reopen a firmado doc (exact transition)', async () => {
     await seedProject('P-2025-001', BASE_PROJECT);
-    await seedDoc('P-2025-001', 'AC', { status: 'firmado' });
+    await seedDoc('P-2025-001', 'RF', { status: 'firmado' });
+    await assertSucceeds(
+      updateDoc(
+        doc(admin(), 'projects', 'P-2025-001', 'documents', 'RF'),
+        {
+          status: 'en_progreso', updatedAt: 2000, updatedBy: 'admin-uid',
+          reopenedAt: 2000, reopenedBy: 'admin-uid',
+          lockedSnapshot: null, lockedAt: null, lockedBy: null, version: 1,
+        },
+      ),
+    );
+  });
+
+  it('admin can reopen an AC that is completo but not signed', async () => {
+    await seedProject('P-2025-001', BASE_PROJECT);
+    await seedDoc('P-2025-001', 'AC', { status: 'completo' });
     await assertSucceeds(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'AC'),
@@ -544,6 +561,14 @@ describe('Sequencing enforcement', () => {
         {
           status: 'firmado', updatedAt: 2000, updatedBy: 'admin-uid',
           lockedSnapshot: {}, lockedAt: 2000, lockedBy: 'admin-uid', version: 1,
+          // Firmar exige una firma del cliente ya subida (ver P0-3/P0-4).
+          firmaCliente: {
+            nombreAclaratorio: 'Juan Perez', dni: '30111222',
+            firma: {
+              id: 'f1', storagePath: 'projects/P-2025-001/AC/f1.jpg',
+              takenAt: 1400, uploadedBy: 'admin-uid', pending: false,
+            },
+          },
         },
       ),
     );
@@ -683,5 +708,262 @@ describe('Config collection', () => {
       await setDoc(doc(ctx.firestore(), 'config', 'template'), { data: 'x' });
     });
     await assertSucceeds(getDoc(doc(tecnico(), 'config', 'template')));
+  });
+});
+
+// ── #P0-3 — El acta firmada es definitiva ─────────────────────────
+//
+// Tests adversariales: no alcanza con que la UI no ofrezca el botón. Estos
+// intentan romper la inmutabilidad del acta firmada directamente por el SDK,
+// que es la vía que tiene cualquiera con una sesión de admin.
+
+describe('AC firmada es inmutable (P0-3)', () => {
+  const CODE = 'P-2025-001';
+
+  async function seedActaFirmada() {
+    await seedProject(CODE, {
+      ...BASE_PROJECT,
+      status: 'entregado',
+      docStatus: { ...BASE_PROJECT.docStatus, RF: 'firmado', AC: 'firmado' },
+    });
+    await seedDoc(CODE, 'RF', { status: 'firmado', aptoEntrega: true });
+    await seedDoc(CODE, 'AC', {
+      status: 'firmado',
+      version: 1,
+      lockedSnapshot: { conformidad: 'conforme' },
+      lockedAt: 1500,
+      lockedBy: 'admin-uid',
+      conformidad: 'conforme',
+      observacionesCliente: 'sin observaciones',
+      firmaCliente: {
+        nombreAclaratorio: 'Juan Perez',
+        dni: '30111222',
+        firma: { id: 'f1', storagePath: `projects/${CODE}/AC/f1.jpg`, takenAt: 1400, uploadedBy: 'admin-uid', pending: false },
+      },
+    });
+  }
+
+  // Una firma del cliente válida: ya subida a Storage y bajo el path del acta.
+  const FIRMA_SUBIDA = {
+    id: 'f1', storagePath: `projects/${CODE}/AC/f1.jpg`,
+    takenAt: 1400, uploadedBy: 'admin-uid', pending: false,
+  };
+
+  async function seedActaEnProgreso() {
+    await seedProject(CODE, {
+      ...BASE_PROJECT,
+      docStatus: { ...BASE_PROJECT.docStatus, RF: 'firmado', AC: 'en_progreso' },
+    });
+    await seedDoc(CODE, 'RF', { status: 'firmado', aptoEntrega: true });
+    await seedDoc(CODE, 'AC', { status: 'en_progreso', version: 0 });
+  }
+
+  // El write exacto que hace setDocStatus() al firmar, con la firma variable.
+  function firmarCon(firma: unknown) {
+    return {
+      status: 'firmado',
+      conformidad: 'conforme',
+      firmaCliente: { nombreAclaratorio: 'Juan Perez', dni: '30111222', firma },
+      version: 1,
+      lockedSnapshot: { conformidad: 'conforme' },
+      lockedAt: 2000,
+      lockedBy: 'admin-uid',
+      updatedAt: 2000,
+      updatedBy: 'admin-uid',
+    };
+  }
+
+  const acRef = (db: ReturnType<typeof admin>) =>
+    doc(db, 'projects', CODE, 'documents', 'AC');
+
+  it('1 · admin NO puede reabrir el acta firmada (transición exacta de reopen)', async () => {
+    await seedActaFirmada();
+    await assertFails(
+      updateDoc(acRef(admin()), {
+        status: 'en_progreso', updatedAt: 2000, updatedBy: 'admin-uid',
+        reopenedAt: 2000, reopenedBy: 'admin-uid',
+        lockedSnapshot: null, lockedAt: null, lockedBy: null, version: 2,
+      }),
+    );
+  });
+
+  it('2 · admin NO puede cambiar el contenido del acta firmada', async () => {
+    await seedActaFirmada();
+    await assertFails(
+      updateDoc(acRef(admin()), {
+        conformidad: 'no_conforme',
+        observacionesCliente: 'reescrito despues de firmar',
+        updatedAt: 2000, updatedBy: 'admin-uid',
+      }),
+    );
+  });
+
+  it('3 · admin NO puede cambiar la firma del cliente', async () => {
+    await seedActaFirmada();
+    await assertFails(
+      updateDoc(acRef(admin()), {
+        firmaCliente: {
+          nombreAclaratorio: 'Otro Nombre',
+          dni: '99999999',
+          firma: { id: 'f2', storagePath: `projects/${CODE}/AC/f2.jpg`, takenAt: 2000, uploadedBy: 'admin-uid', pending: false },
+        },
+        updatedAt: 2000, updatedBy: 'admin-uid',
+      }),
+    );
+  });
+
+  it('4 · el flujo normal de firma sigue permitido (en_progreso → firmado)', async () => {
+    await seedActaEnProgreso();
+    await assertSucceeds(updateDoc(acRef(admin()), firmarCon(FIRMA_SUBIDA)));
+  });
+
+  // ── Intentos de evasión ─────────────────────────────────────────
+
+  it('5 · admin NO puede vaciar el lockedSnapshot del acta firmada', async () => {
+    await seedActaFirmada();
+    await assertFails(
+      updateDoc(acRef(admin()), {
+        lockedSnapshot: null, updatedAt: 2000, updatedBy: 'admin-uid',
+      }),
+    );
+  });
+
+  it('6 · admin NO puede degradar el acta firmada a "completo" para después reabrirla', async () => {
+    await seedActaFirmada();
+    await assertFails(
+      updateDoc(acRef(admin()), {
+        status: 'completo', updatedAt: 2000, updatedBy: 'admin-uid', version: 2,
+        lockedSnapshot: { conformidad: 'conforme' }, lockedAt: 2000, lockedBy: 'admin-uid',
+      }),
+    );
+  });
+
+  it('7 · admin NO puede reabrir y reescribir contenido en el mismo write', async () => {
+    await seedActaFirmada();
+    await assertFails(
+      updateDoc(acRef(admin()), {
+        status: 'en_progreso', updatedAt: 2000, updatedBy: 'admin-uid',
+        reopenedAt: 2000, reopenedBy: 'admin-uid',
+        lockedSnapshot: null, lockedAt: null, lockedBy: null, version: 2,
+        conformidad: 'no_conforme',
+      }),
+    );
+  });
+
+  it('8 · técnico NO puede tocar el acta firmada', async () => {
+    await seedActaFirmada();
+    await assertFails(
+      updateDoc(acRef(tecnico()), {
+        status: 'en_progreso', updatedAt: 2000, updatedBy: 'tec-uid',
+        reopenedAt: 2000, reopenedBy: 'tec-uid',
+        lockedSnapshot: null, lockedAt: null, lockedBy: null, version: 2,
+      }),
+    );
+  });
+
+  it('9 · nadie puede borrar el acta firmada', async () => {
+    await seedActaFirmada();
+    await assertFails(deleteDoc(acRef(admin())));
+  });
+
+  it('10 · admin NO puede reabrir el acta suplantando el uid del reopen', async () => {
+    await seedActaFirmada();
+    await assertFails(
+      updateDoc(acRef(admin()), {
+        status: 'en_progreso', updatedAt: 2000, updatedBy: 'otro-uid',
+        reopenedAt: 2000, reopenedBy: 'otro-uid',
+        lockedSnapshot: null, lockedAt: null, lockedBy: null, version: 2,
+      }),
+    );
+  });
+});
+
+// #P0-3/#P0-4 — La firma que cierra el acta tiene que ser una imagen realmente
+// subida y guardada bajo el path del propio acta. Estos tests atacan el momento
+// de la firma, que es la única ventana en la que el acta admite escrituras.
+describe('el acta no se firma sin una firma del cliente real (P0-3/P0-4)', () => {
+  const CODE = 'P-2025-001';
+
+  const acRef = (db: ReturnType<typeof admin>) =>
+    doc(db, 'projects', CODE, 'documents', 'AC');
+
+  async function seedActaEnProgreso() {
+    await seedProject(CODE, {
+      ...BASE_PROJECT,
+      docStatus: { ...BASE_PROJECT.docStatus, RF: 'firmado', AC: 'en_progreso' },
+    });
+    await seedDoc(CODE, 'RF', { status: 'firmado', aptoEntrega: true });
+    await seedDoc(CODE, 'AC', { status: 'en_progreso', version: 0 });
+  }
+
+  function firmarCon(firma: unknown) {
+    return {
+      status: 'firmado',
+      conformidad: 'conforme',
+      firmaCliente: { nombreAclaratorio: 'Juan Perez', dni: '30111222', firma },
+      version: 1,
+      lockedSnapshot: { conformidad: 'conforme' },
+      lockedAt: 2000, lockedBy: 'admin-uid',
+      updatedAt: 2000, updatedBy: 'admin-uid',
+    };
+  }
+
+  it('NO se puede firmar con la firma todavía en la cola (pending: true)', async () => {
+    await seedActaEnProgreso();
+    await assertFails(updateDoc(acRef(admin()), firmarCon({
+      id: 'f1', storagePath: `projects/${CODE}/AC/f1.jpg`,
+      takenAt: 1400, uploadedBy: 'admin-uid', pending: true,
+    })));
+  });
+
+  it('NO se puede firmar sin firma del cliente (firma: null)', async () => {
+    await seedActaEnProgreso();
+    await assertFails(updateDoc(acRef(admin()), firmarCon(null)));
+  });
+
+  it('NO se puede firmar sin el campo firmaCliente', async () => {
+    await seedActaEnProgreso();
+    await assertFails(updateDoc(acRef(admin()), {
+      status: 'firmado', conformidad: 'conforme', version: 1,
+      lockedSnapshot: { conformidad: 'conforme' },
+      lockedAt: 2000, lockedBy: 'admin-uid',
+      updatedAt: 2000, updatedBy: 'admin-uid',
+    }));
+  });
+
+  // El ataque de blanqueo de path: guardar la firma bajo un docType cuyo
+  // documento sigue abierto para poder sustituir el JPEG después de firmar.
+  it('NO se puede firmar con la firma guardada bajo otro docType (FM abierto)', async () => {
+    await seedActaEnProgreso();
+    await assertFails(updateDoc(acRef(admin()), firmarCon({
+      id: 'f1', storagePath: `projects/${CODE}/FM/f1.jpg`,
+      takenAt: 1400, uploadedBy: 'admin-uid', pending: false,
+    })));
+  });
+
+  it('NO se puede firmar con la firma apuntando a otra obra', async () => {
+    await seedActaEnProgreso();
+    await assertFails(updateDoc(acRef(admin()), firmarCon({
+      id: 'f1', storagePath: 'projects/P-2025-999/AC/f1.jpg',
+      takenAt: 1400, uploadedBy: 'admin-uid', pending: false,
+    })));
+  });
+
+  it('sí se puede firmar con una firma subida bajo el path del acta', async () => {
+    await seedActaEnProgreso();
+    await assertSucceeds(updateDoc(acRef(admin()), firmarCon({
+      id: 'f1', storagePath: `projects/${CODE}/AC/f1.jpg`,
+      takenAt: 1400, uploadedBy: 'admin-uid', pending: false,
+    })));
+  });
+
+  it('cerrar el acta como "completo" no exige firma (todavía no es evidencia)', async () => {
+    await seedActaEnProgreso();
+    await assertSucceeds(updateDoc(acRef(admin()), {
+      status: 'completo', conformidad: 'conforme', version: 1,
+      lockedSnapshot: { conformidad: 'conforme' },
+      lockedAt: 2000, lockedBy: 'admin-uid',
+      updatedAt: 2000, updatedBy: 'admin-uid',
+    }));
   });
 });
