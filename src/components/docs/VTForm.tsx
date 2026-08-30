@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray, type Control, type UseFormRegister } from 'react-hook-form';
 import { useDoc, offlineLockError } from '@/hooks/useDoc';
 import { setDocStatus, reopenDoc } from '@/lib/repo/projects';
+import { pendingUploadsError } from '@/lib/pendingUploads';
 import { buildLockedSnapshot } from '@/lib/inheritance';
 import { enqueuePhoto, removePhotoFromDoc } from '@/lib/photos';
 import PhotoThumb from '@/components/docs/PhotoThumb';
@@ -185,6 +186,9 @@ export default function VTForm({ projectCode, project, upstream, docData }: Prop
     if (!values.estadoSoporte) errs.push('Estado del soporte requerido');
     if (!values.materialSoporte) errs.push('Material del soporte requerido');
     if (!values.dictamen) errs.push('Dictamen requerido');
+    // #P0-4 — Las fotos vivas son las que se van a congelar en el snapshot.
+    const pendingErr = pendingUploadsError(liveDoc ?? values);
+    if (pendingErr) errs.push(pendingErr);
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
     if (!await openConfirm('¿Marcar como completo? El documento quedará bloqueado.')) return;

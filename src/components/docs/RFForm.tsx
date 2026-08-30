@@ -4,6 +4,7 @@ import { useEffect, useState, useRef } from 'react';
 import { useForm, useFieldArray } from 'react-hook-form';
 import { useDoc, offlineLockError } from '@/hooks/useDoc';
 import { setDocStatus, reopenDoc } from '@/lib/repo/projects';
+import { pendingUploadsError } from '@/lib/pendingUploads';
 import { sequencingError } from '@/lib/sequencing';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
 import { enqueuePhoto, removePhotoFromDoc } from '@/lib/photos';
@@ -110,6 +111,9 @@ export default function RFForm({ projectCode, project, upstream, docData }: Prop
     if (!values.fechaRevision) errs.push('Fecha de revisión requerida');
     const seqErr = sequencingError('RF', 'firmado', project.docStatus, upstream);
     if (seqErr) errs.push(seqErr);
+    // #P0-4 — Las fotos vivas son las que se van a congelar en el snapshot.
+    const pendingErr = pendingUploadsError(liveDoc ?? values);
+    if (pendingErr) errs.push(pendingErr);
     if (errs.length) { setLockErrors(errs); return; }
     setLockErrors([]);
     // Una revisión NO apta también se firma (documenta el resultado real); el
