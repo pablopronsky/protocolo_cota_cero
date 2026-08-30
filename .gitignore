@@ -59,3 +59,4 @@ firestore-debug.log
 storage-debug.log
 ui-debug.log
 firebase-debug.log
+.playwright-tmp/

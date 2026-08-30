@@ -18,7 +18,8 @@
     "test:rules:emu": "firebase emulators:exec --only firestore,storage --project cotacero-test \"npm run test:rules && npm run test:api\"",
     "test:e2e": "playwright test",
     "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:image": "playwright test -c playwright.image.config.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",
@@ -47,6 +48,7 @@
     "eslint": "^9.39.4",
     "eslint-config-next": "^16.2.9",
     "eslint-plugin-jsx-a11y": "^6.10.2",
+    "fake-indexeddb": "^6.2.5",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vite-tsconfig-paths": "^5.1.4",
