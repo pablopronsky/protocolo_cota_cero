@@ -186,6 +186,9 @@ describe('Admin createdAt/createdBy freeze', () => {
 describe('Técnico update restrictions', () => {
   it('técnico can update allowed fields', async () => {
     await seedProject('P-2025-001', BASE_PROJECT);
+    // #docStatus-source-of-truth: el mirror solo acepta un slot que cambia si
+    // coincide con el documento real — VT ya está en_progreso de verdad.
+    await seedDoc('P-2025-001', 'VT', { status: 'en_progreso' });
     await assertSucceeds(
       updateDoc(doc(tecnico(), 'projects', 'P-2025-001'), {
         status: 'en_curso',
@@ -281,6 +284,113 @@ describe('Técnico update restrictions', () => {
         updatedAt: 2000,
         updatedBy: 'tec-uid',
       }),
+    );
+  });
+});
+
+// ── docStatus source of truth: el mirror nunca autoriza nada por sí solo ──
+// (fix/docstatus-source-of-truth-2026-08-30). Reproduce el hueco real que
+// permitió COTA-2026-0002: status=entregado + docStatus todo firmado/completo
+// con AC/EP/FM todavía en_progreso en documents/. Cubre tanto la rama admin
+// (el hueco original: sin ningún chequeo de coherencia) como la de técnico.
+
+describe('docStatus es un mirror, nunca fuente de verdad (admin incluido)', () => {
+  it('admin NO puede marcar AC firmado solo en el mirror (documento real sigue en_progreso)', async () => {
+    await seedProject('P-2025-001', { ...BASE_PROJECT, status: 'en_curso' });
+    await seedDoc('P-2025-001', 'AC', { status: 'en_progreso' }); // el AC real nunca se firmó
+    await assertFails(
+      updateDoc(doc(admin(), 'projects', 'P-2025-001'), {
+        docStatus: { ...BASE_PROJECT.docStatus, AC: 'firmado' }, // mentira: AC real no es firmado
+        updatedAt: 2000,
+        updatedBy: 'admin-uid',
+      }),
+    );
+  });
+
+  it('admin NO puede poner status=entregado si el AC real no está firmado (reproduce COTA-2026-0002)', async () => {
+    // Igual que 0002: docStatus ya dice todo firmado/completo, pero AC/EP/FM
+    // reales siguen en_progreso. Ni siquiera cambiar el mirror en este write
+    // debería alcanzar para que 'entregado' pase.
+    await seedProject('P-2025-001', {
+      ...BASE_PROJECT,
+      status: 'en_curso',
+      docStatus: { VT: 'completo', EP: 'completo', OT: 'completo', RF: 'firmado', AC: 'completo', FM: 'completo' },
+    });
+    await seedDoc('P-2025-001', 'AC', { status: 'en_progreso' }); // no firmado de verdad
+    await seedDoc('P-2025-001', 'EP', { status: 'en_progreso' });
+    await seedDoc('P-2025-001', 'FM', { status: 'en_progreso' });
+    await assertFails(
+      updateDoc(doc(admin(), 'projects', 'P-2025-001'), {
+        status: 'entregado',
+        updatedAt: 2000,
+        updatedBy: 'admin-uid',
+      }),
+    );
+  });
+
+  it('admin NO puede escribir un docStatus con valores fuera del enum', async () => {
+    await seedProject('P-2025-001', { ...BASE_PROJECT, status: 'en_curso' });
+    await assertFails(
+      updateDoc(doc(admin(), 'projects', 'P-2025-001'), {
+        docStatus: { ...BASE_PROJECT.docStatus, VT: 'aprobado' }, // no es un DocStatus válido
+        updatedAt: 2000,
+        updatedBy: 'admin-uid',
+      }),
+    );
+  });
+
+  it('admin SÍ puede avanzar el mirror cuando coincide con el documento real (cierre normal)', async () => {
+    // Reproduce el flujo correcto de setDocStatus: el documento real ya está
+    // commiteado (paso 1) antes de que el mirror lo refleje (paso 2).
+    await seedProject('P-2025-001', { ...BASE_PROJECT, status: 'en_curso' });
+    await seedDoc('P-2025-001', 'VT', { status: 'completo' });
+    await assertSucceeds(
+      updateDoc(doc(admin(), 'projects', 'P-2025-001'), {
+        docStatus: { ...BASE_PROJECT.docStatus, VT: 'completo' },
+        updatedAt: 2000,
+        updatedBy: 'admin-uid',
+      }),
+    );
+  });
+
+  it('admin SÍ puede firmar el AC y marcar entregado cuando el AC real ya está firmado', async () => {
+    await seedProject('P-2025-001', { ...BASE_PROJECT, status: 'en_curso' });
+    await seedDoc('P-2025-001', 'AC', { status: 'firmado' });
+    await assertSucceeds(
+      updateDoc(doc(admin(), 'projects', 'P-2025-001'), {
+        status: 'entregado',
+        docStatus: { ...BASE_PROJECT.docStatus, AC: 'firmado' },
+        updatedAt: 2000,
+        updatedBy: 'admin-uid',
+      }),
+    );
+  });
+
+  it('un mirror ya corrupto (dato histórico) no habilita entregado aunque el write no toque AC', async () => {
+    // Simula el estado real encontrado en producción: docStatus.AC ya dice
+    // 'firmado' desde antes (dato viejo, nunca coherente), y este write ni
+    // siquiera intenta cambiar ese slot — solo pide status=entregado.
+    // docStatusCoherent no lo detecta (AC no cambia en este write), pero
+    // acEstaFirmado sí: lee el documento real y lo bloquea igual.
+    await seedProject('P-2025-001', {
+      ...BASE_PROJECT,
+      status: 'en_curso',
+      docStatus: { ...BASE_PROJECT.docStatus, AC: 'firmado' }, // ya corrupto
+    });
+    await seedDoc('P-2025-001', 'AC', { status: 'en_progreso' }); // la realidad
+    await assertFails(
+      updateDoc(doc(admin(), 'projects', 'P-2025-001'), {
+        status: 'entregado',
+        updatedAt: 2000,
+        updatedBy: 'admin-uid',
+      }),
+    );
+  });
+
+  it('admin sigue pudiendo archivar/desarchivar sin que el enum de status lo bloquee', async () => {
+    await seedProject('P-2025-001', { ...BASE_PROJECT, status: 'en_curso' });
+    await assertSucceeds(
+      updateDoc(doc(admin(), 'projects', 'P-2025-001'), { status: 'archivado', updatedAt: 2000 }),
     );
   });
 });
