@@ -113,9 +113,39 @@ service cloud.firestore {
 
     // #7 — No permite marcar el proyecto como 'entregado' si el AC no está
     // firmado. Costo: 1 lectura extra por escritura; aceptable para uso interno.
+    // Se aplica siempre (admin y técnico), incluso si `docStatus.AC` no cambia
+    // en este write: un mirror viejo que ya decía "firmado" de forma incorrecta
+    // no debe poder colarse simplemente por no tocarlo.
     function acEstaFirmado(code) {
       return get(/databases/$(db)/documents/projects/$(code)/documents/AC)
                .data.status == 'firmado';
+    }
+
+    // #docStatus-source-of-truth — documents/{docType}.status es la única
+    // fuente de verdad; docStatus es un mirror que solo puede recibir un valor
+    // para un slot si (a) no cambia respecto del valor previo, o (b) coincide
+    // con el status real del documento correspondiente. `get()` solo se evalúa
+    // si el slot realmente cambió (cortocircuito de `||`), así que el costo
+    // típico es 1 lectura extra (el docType que se está cerrando/reabriendo),
+    // igual que el resto de los chequeos cross-documento de este archivo.
+    //
+    // Nota de diseño: esto exige que el documento real ya esté commiteado
+    // ANTES de que se escriba el mirror — un mismo batch no sirve, porque
+    // get() dentro de una regla no ve las escrituras hermanas de su propio
+    // batch. lib/repo/projects.ts (setDocStatus/reopenDoc) escribe el
+    // documento real primero y el mirror después, en un segundo paso.
+    function docStatusSlotCoherent(code, dt, before, after) {
+      return after[dt] == before[dt]
+          || after[dt] == get(/databases/$(db)/documents/projects/$(code)/documents/$(dt))
+                            .data.status;
+    }
+    function docStatusCoherent(code, before, after) {
+      return docStatusSlotCoherent(code, 'VT', before, after)
+          && docStatusSlotCoherent(code, 'EP', before, after)
+          && docStatusSlotCoherent(code, 'OT', before, after)
+          && docStatusSlotCoherent(code, 'RF', before, after)
+          && docStatusSlotCoherent(code, 'AC', before, after)
+          && docStatusSlotCoherent(code, 'FM', before, after);
     }
 
     // #21 — Documento anterior en el protocolo VT→EP→OT→RF→AC→FM.
@@ -188,7 +218,21 @@ service cloud.firestore {
       allow update: if (isAdmin()
                         // #11 — Congela createdAt/createdBy: ningún update los puede mutar.
                         && request.resource.data.createdAt == resource.data.createdAt
-                        && request.resource.data.createdBy == resource.data.createdBy)
+                        && request.resource.data.createdBy == resource.data.createdBy
+                        // #docStatus-source-of-truth — el admin puede tocar más
+                        // campos que el técnico (nombre, dirección, etc.), pero
+                        // sobre docStatus/status rige la misma garantía: el
+                        // mirror no puede mentir ni decretar 'entregado' sin
+                        // que el AC real esté firmado. 'archivado' se suma al
+                        // enum porque archiveProject()/unarchiveProject() son
+                        // admin-only y no pasan por el flujo secuencial de
+                        // técnico (por eso no se les exige
+                        // validProjectStatusTransition acá).
+                        && request.resource.data.status in ['borrador','en_curso','entregado','archivado']
+                        && validDocStatusMap(request.resource.data.docStatus)
+                        && docStatusCoherent(code, resource.data.docStatus, request.resource.data.docStatus)
+                        && (request.resource.data.status != 'entregado'
+                             || acEstaFirmado(code)))
                     || (isTecnico()
                           // Solo puede tocar estos cuatro campos.
                           && request.resource.data.diff(resource.data)
@@ -203,6 +247,9 @@ service cloud.firestore {
                                request.resource.data.status)
                           // Cada slot de docStatus debe tener un valor del enum.
                           && validDocStatusMap(request.resource.data.docStatus)
+                          // El mirror no puede mentir: cada slot que cambia
+                          // debe coincidir con el documento real.
+                          && docStatusCoherent(code, resource.data.docStatus, request.resource.data.docStatus)
                           // No puede marcar entregado si el AC no está firmado.
                           && (request.resource.data.status != 'entregado'
                                || acEstaFirmado(code)));

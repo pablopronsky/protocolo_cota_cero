@@ -10,6 +10,7 @@ import { DOC_ORDER } from '@/schemas';
 import { sequencingError } from '../sequencing';
 import { pendingUploadsError } from '../pendingUploads';
 import { isReopenable, AC_SIGNED_IS_FINAL } from '../docLifecycle';
+import { omitStatus } from '../docPatch';
 
 // Datos que necesita setDocStatus para validar la secuencia del protocolo al
 // cerrar un documento. Los aporta el caller, que ya tiene el Project + upstream
@@ -133,7 +134,24 @@ export async function saveDoc(
   data: Partial<AnyDoc>,
 ): Promise<void> {
   const ref = doc(db(), 'projects', projectCode, 'documents', docType);
-  await setDoc(ref, { ...data, updatedAt: Date.now() }, { merge: true });
+  await setDoc(ref, { ...omitStatus(data), updatedAt: Date.now() }, { merge: true });
+}
+
+// El mirror (`project.docStatus`/`project.status`) nunca es fuente de verdad:
+// se actualiza en un segundo paso, después de que el documento real (fuente
+// de verdad) ya quedó persistido. Si este segundo paso falla —red, permisos,
+// lo que sea— el documento real ya está a salvo; el mirror queda simplemente
+// atrasado hasta la próxima escritura o una reconciliación, nunca inconsistente
+// de una forma que autorice algo que no pasó de verdad.
+async function updateMirrorBestEffort(
+  projRef: ReturnType<typeof doc>,
+  projUpdate: Record<string, unknown>,
+): Promise<void> {
+  try {
+    await updateDoc(projRef, projUpdate);
+  } catch (err) {
+    console.error('[projects] No se pudo actualizar el mirror docStatus (no crítico, se auto-repara):', err);
+  }
 }
 
 export async function setDocStatus(
@@ -152,7 +170,6 @@ export async function setDocStatus(
     if (err) throw new Error(err);
   }
 
-  const batch = writeBatch(db());
   const docRef = doc(db(), 'projects', projectCode, 'documents', docType);
   const projRef = doc(db(), 'projects', projectCode);
   const now = Date.now();
@@ -175,27 +192,19 @@ export async function setDocStatus(
     if (pendingErr) throw new Error(pendingErr);
   }
 
+  // #docStatus-source-of-truth — El documento real (+ su revisión, si cierra)
+  // se escribe PRIMERO y solo, nunca en el mismo batch que el mirror del
+  // proyecto. Firestore evalúa las reglas de cada escritura de un batch contra
+  // el estado YA COMMITEADO, sin ver las escrituras hermanas del mismo batch:
+  // si el mirror se escribiera junto con el documento, cualquier regla que
+  // valide `docStatus` contra `documents/{docType}.status` en el mismo golpe
+  // vería siempre el valor VIEJO y rechazaría cierres legítimos. Separar los
+  // pasos hace que, para cuando el mirror se escribe, el documento real ya sea
+  // un hecho consumado y verificable.
+  const batch = writeBatch(db());
   // Los metadatos autoritativos van al final: un payload de formulario no puede
   // pisar accidentalmente el estado objetivo, la fecha ni el autor del cambio.
   batch.update(docRef, { ...extra, status, updatedAt: now, updatedBy });
-
-  const projUpdate: Record<string, unknown> = {
-    [`docStatus.${docType}`]: status,
-    updatedAt: now,
-    updatedBy,
-  };
-
-  // Transición de estado del proyecto. Se calcula a partir del estado actual
-  // (lo pasa el caller, que ya tiene el Project cargado) para no requerir una
-  // lectura extra y seguir funcionando offline con writeBatch.
-  if (projectStatus && projectStatus !== 'archivado') {
-    let next: ProjectStatus = projectStatus;
-    if (projectStatus === 'borrador' && status !== 'vacio') next = 'en_curso';
-    if (docType === 'AC' && status === 'firmado') next = 'entregado';
-    if (next !== projectStatus) projUpdate.status = next;
-  }
-
-  batch.update(projRef, projUpdate);
   if (isClosing) {
     addRevisionToBatch(
       batch,
@@ -208,6 +217,25 @@ export async function setDocStatus(
     );
   }
   await batch.commit();
+
+  // El mirror se actualiza después, best-effort: ver updateMirrorBestEffort.
+  const projUpdate: Record<string, unknown> = {
+    [`docStatus.${docType}`]: status,
+    updatedAt: now,
+    updatedBy,
+  };
+
+  // Transición de estado del proyecto. Se calcula a partir del estado actual
+  // (lo pasa el caller, que ya tiene el Project cargado) para no requerir una
+  // lectura extra.
+  if (projectStatus && projectStatus !== 'archivado') {
+    let next: ProjectStatus = projectStatus;
+    if (projectStatus === 'borrador' && status !== 'vacio') next = 'en_curso';
+    if (docType === 'AC' && status === 'firmado') next = 'entregado';
+    if (next !== projectStatus) projUpdate.status = next;
+  }
+
+  await updateMirrorBestEffort(projRef, projUpdate);
 }
 
 // #19 — Reabre un doc bloqueado (completo/firmado → en_progreso). Solo admin:
@@ -233,11 +261,15 @@ export async function reopenDoc(
       : 'Este documento no se puede reabrir.');
   }
 
-  const batch = writeBatch(db());
+  // Ver comentario #docStatus-source-of-truth en setDocStatus: el documento
+  // real + su revisión se escriben primero y solos; el mirror va después,
+  // best-effort, para que las reglas siempre lo validen contra un estado real
+  // ya commiteado.
   const docRef = doc(db(), 'projects', projectCode, 'documents', docType);
   const projRef = doc(db(), 'projects', projectCode);
   const now = Date.now();
 
+  const batch = writeBatch(db());
   batch.update(docRef, {
     status: 'en_progreso' as DocStatus,
     lockedSnapshot: null,
@@ -249,13 +281,14 @@ export async function reopenDoc(
     reopenedAt: now,
     reopenedBy: actor,
   });
-  batch.update(projRef, {
+  addRevisionToBatch(batch, projectCode, docType, 'en_progreso', snapshot, version, actor);
+  await batch.commit();
+
+  await updateMirrorBestEffort(projRef, {
     [`docStatus.${docType}`]: 'en_progreso' as DocStatus,
     updatedAt: now,
     updatedBy: actor,
   });
-  addRevisionToBatch(batch, projectCode, docType, 'en_progreso', snapshot, version, actor);
-  await batch.commit();
 }
 
 export async function archiveProject(projectCode: ProjectCode): Promise<void> {

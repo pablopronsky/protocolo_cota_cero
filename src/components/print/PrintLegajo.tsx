@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { getProject, getAllDocs } from '@/lib/repo/projects';
 import { useAuth } from '@/hooks/useAuth';
 import { buildLockedSnapshot } from '@/lib/inheritance';
-import { DOC_ORDER, DOC_LABELS } from '@/schemas';
+import { buildDocRows, isLegajoFinal, type DocRow } from '@/lib/legajo';
+import { DOC_ORDER } from '@/schemas';
 import type { Project, DocType, DocStatus, AnyDoc } from '@/schemas';
 import { Body, DocumentFrame, Footer, Header, PrintActions, type Snapshot } from './PrintDocument';
 import { PrintBrandLogo } from './PrintBrandLogo';
@@ -12,15 +13,6 @@ import { PrintBrandLogo } from './PrintBrandLogo';
 interface Props {
   code: string;
 }
-
-export type DocRow = {
-  docType: DocType;
-  label: string;
-  status: DocStatus;
-  locked: boolean;
-  version: number;
-  updatedAt: number | null;
-};
 
 export default function PrintLegajo({ code }: Props) {
   const { user, loading: authLoading } = useAuth({ loadProfile: false });
@@ -55,18 +47,7 @@ export default function PrintLegajo({ code }: Props) {
 
   const rows = useMemo<DocRow[]>(() => {
     if (!project) return [];
-    return DOC_ORDER.map((docType) => {
-      const doc = docs[docType];
-      const status = (project.docStatus?.[docType] ?? doc?.status ?? 'vacio') as DocStatus;
-      return {
-        docType,
-        label: DOC_LABELS[docType],
-        status,
-        locked: isDocLocked(status),
-        version: doc?.version ?? 0,
-        updatedAt: typeof doc?.updatedAt === 'number' ? doc.updatedAt : null,
-      };
-    });
+    return buildDocRows(docs);
   }, [docs, project]);
 
   if (loading) {
@@ -349,18 +330,6 @@ function ExitItem({ title, text }: { title: string; text: string }) {
       <span>{text}</span>
     </div>
   );
-}
-
-function isDocLocked(status: DocStatus | undefined): boolean {
-  return status === 'completo' || status === 'firmado';
-}
-
-function isLegajoFinal(rows: DocRow[]): boolean {
-  const statusByType = Object.fromEntries(rows.map((row) => [row.docType, row.status])) as Partial<Record<DocType, DocStatus>>;
-  return rows.length === DOC_ORDER.length
-    && rows.every((row) => row.locked)
-    && statusByType.RF === 'firmado'
-    && statusByType.AC === 'firmado';
 }
 
 function statusText(status: DocStatus): string {
