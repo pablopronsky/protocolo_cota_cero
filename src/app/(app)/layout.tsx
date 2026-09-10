@@ -11,7 +11,7 @@ import { SaveStatusProvider, useSaveStatusContext } from '@/contexts/SaveStatusC
 import { ToastProvider } from '@/contexts/ToastContext';
 import SaveIndicator from '@/components/SaveIndicator';
 
-const APP_VERSION = '2.6.0';
+import { APP_VERSION } from '@/lib/version';
 
 const IconMenu = () => (
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none">

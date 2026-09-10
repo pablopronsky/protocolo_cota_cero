@@ -33,11 +33,11 @@ beforeAll(async () => {
     projectId: PROJECT_ID,
     firestore: {
       rules: readFileSync(resolve(__dirname, '../../firestore.rules'), 'utf8'),
-      host: '127.0.0.1', port: 8080,
+      host: '127.0.0.1', port: 18080,
     },
     storage: {
       rules: readFileSync(resolve(__dirname, '../../storage.rules'), 'utf8'),
-      host: '127.0.0.1', port: 9199,
+      host: '127.0.0.1', port: 19199,
     },
   });
 }, 60_000);
@@ -302,4 +302,22 @@ describe('9 - acta firmada congela los archivos de toda la obra', () => {
     await seedFile(`projects/${CODE}/AC/firma.jpg`);
     await assertSucceeds(getBytes(ref(adminStorage(), `projects/${CODE}/AC/firma.jpg`)));
   });
+});
+
+
+describe('firma aceptada antes del cierre administrativo', () => {
+  for (const pending of [true, false]) {
+    it(`sobrescritura de firma pendiente=${pending}`, async () => {
+      const path = `projects/${CODE}/AC/firma-cliente.jpg`;
+      await testEnv.withSecurityRulesDisabled(async ctx => {
+        await setDoc(doc(ctx.firestore(), 'projects', CODE, 'documents', 'AC'), {
+          docType: 'AC', projectCode: CODE, status: 'en_progreso',
+          firmaCliente: { firma: { storagePath: path, pending } },
+        });
+      });
+      await seedFile(path);
+      if (pending) await assertSucceeds(upload(adminStorage(), path));
+      else await assertFails(upload(adminStorage(), path, new Uint8Array([0xff, 0xd8, 1, 0xff, 0xd9])));
+    });
+  }
 });

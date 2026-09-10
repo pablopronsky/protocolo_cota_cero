@@ -1,123 +1,44 @@
-import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import { getAuth, connectAuthEmulator } from 'firebase/auth';
-import {
-  getFirestore, connectFirestoreEmulator, doc, setDoc,
-} from 'firebase/firestore';
-import type { Page } from '@playwright/test';
+import { initializeApp, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
+import { getAuth } from 'firebase-admin/auth';
+import { expect, type Page } from '@playwright/test';
 
-const EMULATOR_HOST = '127.0.0.1';
-const AUTH_PORT = 9099;
-const FIRESTORE_PORT = 8080;
-
-let app: FirebaseApp;
-
-function getApp(): FirebaseApp {
-  if (!app) {
-    app = getApps()[0] ?? initializeApp({
-      apiKey: 'test-api-key',
-      authDomain: `${EMULATOR_HOST}:${AUTH_PORT}`,
-      projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID ?? 'cotacero-test',
-      storageBucket: 'cotacero-test.appspot.com',
-      messagingSenderId: '000000000000',
-      appId: '1:000000000000:web:000000000000000000000000',
-    });
-    connectAuthEmulator(getAuth(app), `http://${EMULATOR_HOST}:${AUTH_PORT}`, { disableWarnings: true });
-    connectFirestoreEmulator(getFirestore(app), EMULATOR_HOST, FIRESTORE_PORT);
-  }
-  return app;
-}
-
-export function getTestDb() {
-  return getFirestore(getApp());
-}
-
-export async function signInAsAdmin(page: Page) {
-  const email = process.env.TEST_ADMIN_EMAIL ?? 'admin@test.cotacero.com';
-  const password = process.env.TEST_ADMIN_PASSWORD ?? 'testpassword123';
+if (process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:18080' || process.env.FIREBASE_AUTH_EMULATOR_HOST !== '127.0.0.1:19099') throw new Error('El E2E requiere emuladores aislados.');
+const app = getApps().find(app => app.name === 'e2e-fixtures') ?? initializeApp({ projectId: 'cotacero-test' }, 'e2e-fixtures');
+export const db = getFirestore(app);
+export const docRef = (code: string, type: string) => db.doc(`projects/${code}/documents/${type}`);
+export async function signIn(page: Page, role: 'admin' | 'tecnico' = 'admin') {
+  const uid = `${role}-e2e`; const email = `${role}@cotacero.test`; const password = 'test-password-123';
+  const auth = getAuth(app);
+  try { await auth.getUser(uid); } catch { await auth.createUser({ uid, email, password }); }
+  await auth.setCustomUserClaims(uid, { role });
+  await db.doc(`users/${uid}`).set({ uid, nombre: role, email, role, activo: true });
   await page.goto('/login');
-  await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/contraseña|password/i).fill(password);
-  await page.getByRole('button', { name: /ingresar|login|entrar/i }).click();
-  await page.waitForURL('/projects');
+  await page.getByLabel(/email/i).fill(email); await page.getByLabel('Contraseña', { exact: true }).fill(password);
+  await page.getByRole('button', { name: /ingresar/i }).click();
+  await expect(page).toHaveURL(/\/projects$/);
 }
-
-export async function seedTestProject(projectCode: string) {
-  const db = getTestDb();
-  const projectData = {
-    code: projectCode,
-    year: 2025,
-    seq: 999,
-    clienteId: 'client-test',
-    clienteNombre: 'Cliente Test E2E',
-    domicilioObra: { calle: 'Calle Test', numero: '1', localidad: 'CABA' },
-    tipoEspacio: 'vivienda',
-    modalidad: 'obra_integral',
-    materialInstalado: { tipo: 'laminado', descripcion: 'Test 8mm' },
-    status: 'borrador',
-    docStatus: { VT: 'vacio', EP: 'vacio', OT: 'vacio', RF: 'vacio', AC: 'vacio', FM: 'vacio' },
-    responsableComercial: 'admin-uid',
-    responsableTecnico: 'tec-uid',
-    createdAt: Date.now(),
-    createdBy: 'admin-uid',
-    updatedAt: Date.now(),
-    updatedBy: 'admin-uid',
-  };
-
-  await setDoc(doc(db, 'projects', projectCode), projectData);
-
-  const docTypes = ['VT', 'EP', 'OT', 'RF', 'AC', 'FM'];
-  for (const dt of docTypes) {
-    await setDoc(doc(db, 'projects', projectCode, 'documents', dt), {
-      docType: dt,
-      projectCode,
-      status: 'vacio',
-      lockedSnapshot: null,
-      lockedAt: null,
-      lockedBy: null,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      updatedBy: 'admin-uid',
-      version: 0,
-    });
-  }
-
-  return projectData;
+export async function seed(code: string) {
+  await db.recursiveDelete(db.doc(`projects/${code}`));
+  await db.doc(`projects/${code}`).set({
+    code, year: 2026, seq: 9901, clienteId: 'client-e2e', clienteNombre: 'Cliente E2E',
+    domicilioObra: { calle: 'Prueba', numero: '123', localidad: 'CABA' }, tipoEspacio: 'vivienda', modalidad: 'obra_integral',
+    materialInstalado: { tipo: 'spc', descripcion: 'Roble de prueba', m2Estimados: 20 }, status: 'en_curso',
+    docStatus: { VT: 'completo', EP: 'completo', OT: 'completo', RF: 'firmado', AC: 'en_progreso', FM: 'vacio' },
+    responsableComercial: 'admin-e2e', responsableTecnico: 'tecnico-e2e', createdAt: 1000, updatedAt: 1000, createdBy: 'admin-e2e', updatedBy: 'admin-e2e',
+  });
+  await db.doc('clients/client-e2e').set({ id: 'client-e2e', nombre: 'Cliente E2E', contacto: 'Cliente', telefono: '1100000000', createdAt: 1000, updatedAt: 1000 });
+  for (const type of ['VT', 'EP', 'OT', 'RF', 'AC', 'FM']) await docRef(code, type).set({
+    docType: type, projectCode: code, status: type === 'RF' ? 'firmado' : type === 'AC' ? 'en_progreso' : type === 'FM' ? 'vacio' : 'completo',
+    createdAt: 1000, updatedAt: 1000, updatedBy: 'admin-e2e', version: 0, lockedSnapshot: null, lockedAt: null, lockedBy: null,
+    ...(type === 'OT' ? { alcance: 'Instalación de piso' } : {}), ...(type === 'RF' ? { aptoEntrega: true } : {}),
+    ...(type === 'AC' ? { fechaActa: '', conformidad: '', observacionesCliente: '', firmaCliente: { nombreAclaratorio: '', dni: '', firma: null }, firmaCotaCero: { uid: '', firma: null } } : {}),
+  });
 }
-
-export async function advanceToReadyForSignoff(projectCode: string) {
-  const db = getTestDb();
-
-  const docUpdates: Record<string, Record<string, unknown>> = {
-    VT: { status: 'completo', dictamen: 'apto', aptoEntrega: true },
-    EP: { status: 'completo' },
-    OT: { status: 'completo', alcance: 'Instalación laminado living' },
-    RF: { status: 'completo', aptoEntrega: true },
-    AC: { status: 'en_progreso', conformidad: '', observacionesCliente: '' },
-    FM: { status: 'vacio' },
-  };
-
-  for (const [dt, data] of Object.entries(docUpdates)) {
-    await setDoc(
-      doc(db, 'projects', projectCode, 'documents', dt),
-      {
-        docType: dt,
-        projectCode,
-        lockedSnapshot: null,
-        lockedAt: null,
-        lockedBy: null,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        updatedBy: 'admin-uid',
-        version: 1,
-        ...data,
-      },
-    );
-  }
-
-  await setDoc(doc(db, 'projects', projectCode), {
-    status: 'en_curso',
-    docStatus: { VT: 'completo', EP: 'completo', OT: 'completo', RF: 'completo', AC: 'en_progreso', FM: 'vacio' },
-    updatedAt: Date.now(),
-    updatedBy: 'admin-uid',
-  }, { merge: true });
+export async function drawSignature(page: Page) {
+  const canvas = page.locator('canvas').first(); await canvas.scrollIntoViewIfNeeded();
+  const box = await canvas.boundingBox(); if (!box) throw new Error('No hay lienzo de firma.');
+  await page.mouse.move(box.x + 20, box.y + 35); await page.mouse.down();
+  await page.mouse.move(box.x + 60, box.y + 65, { steps: 5 }); await page.mouse.move(box.x + 120, box.y + 25, { steps: 5 }); await page.mouse.up();
+  await page.getByRole('button', { name: 'Guardar firma', exact: true }).first().click();
 }

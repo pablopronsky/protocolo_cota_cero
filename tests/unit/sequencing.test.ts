@@ -13,23 +13,23 @@ const ALL_COMPLETE: DocStatusMap = {
   RF: 'completo', AC: 'completo', FM: 'completo',
 };
 
-// ── Non-closing transitions (autosave, draft) ─────────────────────
+// â”€â”€ Non-closing transitions (autosave, draft) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('Non-closing transitions always allowed', () => {
-  it('vacio → en_progreso is always ok', () => {
+  it('vacio â†’ en_progreso is always ok', () => {
     expect(sequencingError('EP', 'en_progreso', EMPTY)).toBeNull();
   });
 
-  it('vacio → en_progreso ok even with empty protocol', () => {
+  it('vacio â†’ en_progreso ok even with empty protocol', () => {
     expect(sequencingError('AC', 'en_progreso', EMPTY)).toBeNull();
   });
 
-  it('en_progreso → en_progreso ok', () => {
+  it('en_progreso â†’ en_progreso ok', () => {
     expect(sequencingError('RF', 'en_progreso', { ...EMPTY, RF: 'en_progreso' })).toBeNull();
   });
 });
 
-// ── VT (no predecessor) ───────────────────────────────────────────
+// â”€â”€ VT (no predecessor) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('VT sequencing', () => {
   it('can close VT regardless of prior state', () => {
@@ -41,7 +41,7 @@ describe('VT sequencing', () => {
   });
 });
 
-// ── EP requires VT closed ─────────────────────────────────────────
+// â”€â”€ EP requires VT closed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('EP sequencing', () => {
   it('cannot close EP if VT is vacio', () => {
@@ -66,7 +66,7 @@ describe('EP sequencing', () => {
   });
 });
 
-// ── OT requires EP closed ─────────────────────────────────────────
+// â”€â”€ OT requires EP closed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('OT sequencing', () => {
   it('cannot close OT if EP is not closed', () => {
@@ -80,7 +80,7 @@ describe('OT sequencing', () => {
   });
 });
 
-// ── RF requires OT closed ─────────────────────────────────────────
+// â”€â”€ RF requires OT closed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('RF sequencing', () => {
   it('cannot close RF if OT is not closed', () => {
@@ -96,7 +96,7 @@ describe('RF sequencing', () => {
   });
 });
 
-// ── AC requires RF closed + aptoEntrega ───────────────────────────
+// â”€â”€ AC requires RF closed + aptoEntrega â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('AC sequencing', () => {
   const rfCompleto = { ...ALL_COMPLETE, AC: 'vacio', FM: 'vacio' } as DocStatusMap;
@@ -108,34 +108,34 @@ describe('AC sequencing', () => {
   });
 
   it('can close AC without upstream when RF is closed', () => {
-    // status completo (not firmado) — upstream not required
+    // status completo (not firmado) â€” upstream not required
     expect(sequencingError('AC', 'completo', rfCompleto)).toBeNull();
   });
 
   it('cannot sign AC when RF marks obra NOT apto', () => {
     const rf = { aptoEntrega: false } as unknown as DocRF;
-    expect(sequencingError('AC', 'firmado', rfCompleto, { RF: rf })).not.toBeNull();
+    expect(sequencingError('AC', 'firmado', rfCompleto, { VT: { status: 'completo' } as never, EP: { status: 'completo' } as never, OT: { status: 'completo' } as never, RF: { ...rf, status: 'completo' } })).not.toBeNull();
   });
 
   it('can sign AC when RF is apto', () => {
     const rf = { aptoEntrega: true } as unknown as DocRF;
-    expect(sequencingError('AC', 'firmado', rfCompleto, { RF: rf })).toBeNull();
+    expect(sequencingError('AC', 'firmado', rfCompleto, { VT: { status: 'completo' } as never, EP: { status: 'completo' } as never, OT: { status: 'completo' } as never, RF: { ...rf, status: 'completo' } })).toBeNull();
   });
 
   it('error message for non-apto RF mentions RF', () => {
     const rf = { aptoEntrega: false } as unknown as DocRF;
-    const error = sequencingError('AC', 'firmado', rfCompleto, { RF: rf });
+    const error = sequencingError('AC', 'firmado', rfCompleto, { VT: { status: 'completo' } as never, EP: { status: 'completo' } as never, OT: { status: 'completo' } as never, RF: { ...rf, status: 'completo' } });
     expect(error).toContain('RF');
   });
 
   it('fails closed when RF upstream is missing', () => {
-    const error = sequencingError('AC', 'firmado', rfCompleto, {});
+    const error = sequencingError('AC', 'firmado', rfCompleto, { VT: { status: 'completo' } as never, EP: { status: 'completo' } as never, OT: { status: 'completo' } as never });
     expect(error).not.toBeNull();
     expect(error).toContain('RF');
   });
 });
 
-// ── FM requires AC closed ─────────────────────────────────────────
+// â”€â”€ FM requires AC closed â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('FM sequencing', () => {
   it('cannot close FM if AC is not closed', () => {
@@ -147,7 +147,7 @@ describe('FM sequencing', () => {
   });
 });
 
-// ── Edge cases ────────────────────────────────────────────────────
+// â”€â”€ Edge cases â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 describe('Edge cases', () => {
   it('handles vacio status map gracefully', () => {

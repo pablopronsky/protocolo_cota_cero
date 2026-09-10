@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useDoc, offlineLockError } from '@/hooks/useDoc';
-import { setDocStatus, saveDoc, reopenDoc } from '@/lib/repo/projects';
+import { documentAction } from '@/lib/documentApi';
+import { setDocStatus, reopenDoc } from '@/lib/repo/projects';
 import { pendingUploadsError } from '@/lib/pendingUploads';
 import { isReopenable } from '@/lib/docLifecycle';
 import { buildLockedSnapshot, deriveInherited } from '@/lib/inheritance';
@@ -131,33 +132,16 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
     return () => sub.unsubscribe();
   }, [watch, contentLocked, autosave, project.status]);
 
-  // #22 — Persiste exactamente el contenido que el cliente firmó, para que lo
-  // guardado en Firestore coincida con lo firmado aunque falte el bloqueo final.
-  async function persistFrozenContent(v: DocAC) {
-    await saveDoc(projectCode, 'AC', {
-      fechaActa: v.fechaActa ?? '',
-      conformidad: v.conformidad ?? '',
-      observacionesCliente: v.observacionesCliente ?? '',
-      firmaCliente: {
-        nombreAclaratorio: v.firmaCliente?.nombreAclaratorio ?? '',
-        dni: v.firmaCliente?.dni ?? '',
-      },
-    } as Partial<DocAC>);
-  }
-
   async function handleFirmaCliente(file: File) {
     if (!user) return;
     setSignError(null);
     try {
-      // enqueueSignature escribe el cleanRef en Firestore; no llega a autosave.
-      const { cleanRef, localBlob } = await enqueueSignature(projectCode, 'firmaCliente.firma', file, user.uid);
-      setValue('firmaCliente.firma', cleanRef); // solo para validación en handleSign
-      setFirmaClienteBlob(localBlob);
-      // #22 — Congelar el contenido en el momento de la firma del cliente.
       await cancelAutosave();
       const snapshotValues = getValues();
-      frozenValuesRef.current = snapshotValues;
-      await persistFrozenContent(snapshotValues);
+      const { cleanRef, localBlob } = await enqueueSignature(projectCode, 'firmaCliente.firma', file, user.uid, snapshotValues as unknown as Record<string, unknown>);
+      setValue('firmaCliente.firma', cleanRef);
+      setFirmaClienteBlob(localBlob);
+      frozenValuesRef.current = { ...snapshotValues, firmaCliente: { ...snapshotValues.firmaCliente, firma: cleanRef } };
       setFrozen(true);
     } catch (e) {
       setSignError(e instanceof Error ? e.message : 'No se pudo capturar la firma del cliente.');
@@ -269,13 +253,7 @@ export default function ACForm({ projectCode, project, upstream, docData }: Prop
     if (!await openConfirm('¿Descartar la firma del cliente y volver a editar el acta?', { danger: true })) return;
     try {
       await cancelQueuedSignature(projectCode, 'AC', 'firmaCliente.firma');
-      await saveDoc(projectCode, 'AC', {
-        firmaCliente: {
-          nombreAclaratorio: liveAC?.firmaCliente?.nombreAclaratorio ?? '',
-          dni: liveAC?.firmaCliente?.dni ?? '',
-          firma: null,
-        },
-      } as Partial<DocAC>);
+      await documentAction({ action: 'discard-signature', projectCode, docType: 'AC' });
     } catch (e) {
       setSignError(e instanceof Error ? e.message : 'No se pudo descartar la firma.');
       return;

@@ -16,7 +16,7 @@ import { NextRequest } from 'next/server';
 // verificación del ID token y el bucket de Storage, que no son lo que se prueba.
 
 const PROJECT_ID = 'cotacero-api-test';
-process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:8080';
+process.env.FIRESTORE_EMULATOR_HOST ??= '127.0.0.1:18080';
 
 let app: App;
 let db: Firestore;

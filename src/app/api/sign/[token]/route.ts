@@ -1,3 +1,4 @@
+import { buildLockedSnapshot } from '@/lib/inheritance';
 import { NextRequest, NextResponse } from 'next/server';
 import { ZodError } from 'zod';
 import { randomUUID } from 'crypto';
@@ -181,6 +182,9 @@ export async function POST(
           : { status: 'cancelled' });
       });
       tx.update(acRef, {
+        acceptedSnapshot: buildLockedSnapshot(project, toDocumentMap(documentsSnap), {
+          ...ac, conformidad: input.conformidad, observacionesCliente: input.observacionesCliente,
+        }),
         conformidad: input.conformidad,
         observacionesCliente: input.observacionesCliente,
         fechaActa: ac.fechaActa || hoy,

@@ -1,5 +1,6 @@
+import { documentAction } from './documentApi';
 import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { doc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseStorage, getFirebaseDb } from './firebase/client';
 import { normalizeImage, assertUploadable, UPLOAD_EXT, PhotoPipelineError } from './imageNormalize';
 import type { PhotoRef, ProjectCode, DocType } from '@/schemas';
@@ -35,6 +36,7 @@ interface QueueEntry {
   docType: DocType;
   photoRef: PhotoRef; // cleanRef — sin localBlob
   blob: Blob; // imagen normalizada lista para subir
+  signatureContent?: Record<string, unknown>;
   signatureField?: string; // si está: actualizar este campo en lugar de registroFotografico
   attempts?: number; // intentos con respuesta del servidor (no cuenta los offline)
   failed?: QueueFailure; // si está: fallo permanente, no se reintenta solo
@@ -312,6 +314,7 @@ export async function enqueueSignature(
   signatureField: string, // e.g. 'firmaCliente.firma'
   file: File,
   uploadedBy: string,
+  signatureContent?: Record<string, unknown>,
 ): Promise<{ cleanRef: PhotoRef; localBlob: string }> {
   const id = crypto.randomUUID();
   const storagePath = `projects/${projectCode}/AC/${id}.${UPLOAD_EXT}`;
@@ -328,22 +331,20 @@ export async function enqueueSignature(
   };
 
   try {
-    await idbPut({ entryId: crypto.randomUUID(), projectCode, docType: 'AC', photoRef: cleanRef, blob, signatureField });
+    await idbPut({ entryId: crypto.randomUUID(), projectCode, docType: 'AC', photoRef: cleanRef, blob, signatureField, signatureContent });
   } catch (e) {
     URL.revokeObjectURL(localBlob);
     throw new Error('No se pudo guardar la firma en la cola local: ' + describeError(e));
   }
   void notifyQueueListeners();
 
-  // Misma razón que en enqueuePhoto: no se espera el ack para no bloquear la
-  // firma sin señal. El SDK preserva el orden de las escrituras locales, así
-  // que lo que el acta escriba después sigue quedando por detrás de esta.
-  const db = getFirebaseDb();
-  const audit = auditFields();
-  void updateDoc(doc(db, 'projects', projectCode, 'documents', 'AC'), {
-    [signatureField]: cleanRef,
-    ...audit,
-  }).catch((e: unknown) => { void recordEntryFailure(id, e); });
+  if (signatureField !== 'firmaCliente.firma') {
+    void updateDoc(doc(getFirebaseDb(), 'projects', projectCode, 'documents', 'AC'), {
+      [signatureField]: cleanRef, ...auditFields(),
+    }).catch((e: unknown) => { void recordEntryFailure(id, e); });
+  }
+  // La firma del cliente y su contenido se registran juntos al sincronizar.
+  // El Blob y los valores sobreviven offline en la misma entrada IndexedDB.
 
   if (typeof navigator !== 'undefined' && navigator.onLine) void flushPhotoQueue();
 
@@ -420,6 +421,7 @@ export async function cancelQueuedSignature(
   docType: DocType,
   signatureField: string,
 ): Promise<void> {
+  if (inFlight) await inFlight;
   try {
     const all = await idbGetAll();
     for (const e of all) {
@@ -460,12 +462,19 @@ const ACK_TIMEOUT_CODE = 'firestore/timeout';
  * `arrayUnion` con el mismo elemento es un no-op, y reescribir el campo escalar
  * de una firma con el mismo valor también, así que repetirlo es seguro.
  */
-async function ensurePendingRef(entry: QueueEntry): Promise<void> {
+async function ensurePendingRef(entry: QueueEntry): Promise<boolean> {
+  if (entry.signatureField === 'firmaCliente.firma') {
+    await documentAction({ action: 'capture-signature', projectCode: entry.projectCode,
+      docType: 'AC', signature: entry.photoRef, values: entry.signatureContent ?? {} });
+    const snap = await getDoc(doc(getFirebaseDb(), 'projects', entry.projectCode, 'documents', 'AC'));
+    return snap.data()?.firmaCliente?.firma?.pending !== false;
+  }
   const db = getFirebaseDb();
   const docRef = doc(db, 'projects', entry.projectCode, 'documents', entry.docType);
   await withAckTimeout(entry.signatureField
     ? updateDoc(docRef, { [entry.signatureField]: entry.photoRef, ...auditFields() })
     : updateDoc(docRef, { registroFotografico: arrayUnion(entry.photoRef), ...auditFields() }));
+  return true;
 }
 
 /**
@@ -541,7 +550,8 @@ async function runFlush(): Promise<void> {
     try {
       // Primero el permiso de Firestore, después el binario. El orden importa:
       // un objeto en Storage no se puede borrar desde la app.
-      await ensurePendingRef(entry);
+      const stillPending = await ensurePendingRef(entry);
+      if (!stillPending) { await idbDelete(entry.entryId); changed = true; continue; }
 
       const storageRef = ref(storage, entry.photoRef.storagePath);
       await uploadBytes(storageRef, entry.blob, { contentType: entry.blob.type });

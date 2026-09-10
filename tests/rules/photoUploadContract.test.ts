@@ -29,11 +29,11 @@ beforeAll(async () => {
     projectId: PROJECT_ID,
     firestore: {
       rules: readFileSync(resolve(__dirname, '../../firestore.rules'), 'utf8'),
-      host: '127.0.0.1', port: 8080,
+      host: '127.0.0.1', port: 18080,
     },
     storage: {
       rules: readFileSync(resolve(__dirname, '../../storage.rules'), 'utf8'),
-      host: '127.0.0.1', port: 9199,
+      host: '127.0.0.1', port: 19199,
     },
   });
 }, 60_000);

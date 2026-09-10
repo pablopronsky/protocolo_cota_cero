@@ -1,0 +1,32 @@
+
+ RUN  v3.2.6 G:/Cota Cero protocolo/cotacero
+
+
+⎯⎯⎯⎯⎯⎯ Failed Suites 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/browser/imageNormalize.spec.ts [ tests/browser/imageNormalize.spec.ts ]
+Error: Playwright Test did not expect test.beforeEach() to be called here.
+Most common reasons include:
+- You are calling test.beforeEach() in a configuration file.
+- You are calling test.beforeEach() in a file that is imported by the configuration file.
+- You have two different versions of @playwright/test. This usually happens
+  when one of the dependencies in your package.json depends on @playwright/test.
+- You are calling test.beforeEach() from an async test.describe() block. Only sync ones are supported.
+ ❯ _TestTypeImpl._currentSuite node_modules/playwright/lib/common/index.js:2257:13
+ ❯ _TestTypeImpl._hook node_modules/playwright/lib/common/index.js:2343:24
+ ❯ Function.beforeEach node_modules/playwright/lib/common/index.js:1220:12
+ ❯ tests/browser/imageNormalize.spec.ts:80:6
+     78| }
+     79|
+     80| test.beforeEach(async ({ page }) => { await loadModule(page); });
+       |      ^
+     81|
+     82| // 1 — JPEG válido de cámara
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  no tests
+   Start at  00:51:49
+   Duration  685ms (transform 36ms, setup 0ms, collect 0ms, tests 0ms, environment 0ms, prepare 126ms)

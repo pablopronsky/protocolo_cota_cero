@@ -26,6 +26,8 @@ export default defineConfig([
   },
   globalIgnores([
     '.next/**',
+    '.next-test/**',
+    '.playwright-tmp/**',
     'out/**',
     'build/**',
     'output/**',

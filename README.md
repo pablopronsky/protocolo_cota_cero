@@ -1,36 +1,33 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Protocolo Cota Cero
 
-## Getting Started
+Aplicación interna para gestionar obras, documentos VT → EP → OT → RF → AC → FM, evidencias, firma presencial/remota e impresión del legajo. Next.js, React y Firebase. Versión actual: **2.6.7**, centralizada en `package.json` y `src/lib/version.ts`.
 
-First, run the development server:
+## Desarrollo
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+Usar Node **22.x**, ejecutar `npm ci`, configurar las variables Firebase locales y ejecutar `npm run dev`. Las credenciales del Admin SDK pertenecen exclusivamente al servidor y nunca se agregan a Git. No habilitar emuladores en Vercel.
+
+## Verificación completa
+
+Requisitos: Node 22, Java 21, Firebase CLI 15.28.2 y Chromium de Playwright.
+
+```sh
+npm ci
+npm install -g firebase-tools@15.28.2
+npx playwright install chromium
+npm run lint
+npm run typecheck
+npm run test:all:emu
+npm run build
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+`test:all:emu` usa exclusivamente `cotacero-test`: Firestore 18080, Auth 19099 y Storage 19199. Ejecuta Vitest (unidad, reglas y API), imágenes y seis recorridos de navegador. El navegador usa una build independiente `.next-test`, usuarios ficticios y datos sembrados con Admin SDK. Un fallo devuelve un código distinto de cero. `npm test` requiere los emuladores ya disponibles; `test:unit` puede ejecutarse sin ellos. Los tests de Playwright no se importan en Vitest.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Integridad de documentos
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+El autoguardado conserva la cola offline y escribe el usuario actual. Los cierres, reaperturas, capturas/descartes de firma y revisiones pasan por `/api/projects/document`, con autenticación y validaciones de servidor. Cerrar requiere conexión. Documento, revisión y estado de obra cambian en una transacción. La firma aceptada conserva el contenido y el contexto de obra; el archivo ya subido no puede reemplazarse. El cierre del acta sigue siendo definitivo.
 
-## Learn More
+## Publicación
 
-To learn more about Next.js, take a look at the following resources:
+La rama de producción confirmada es **master**. Publicar únicamente después de verificar todo. Vercel construye la aplicación al recibir el push. Las reglas Firebase requieren un despliegue separado: publicar primero la aplicación y luego `firebase deploy --only firestore:rules,storage --project cota-cero-protocolo`. Un push no actualiza reglas por sí solo. Verificar ambos resultados antes de declarar la entrega completa.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Ver [CHANGELOG.md](CHANGELOG.md), [REVISION-2026-09-10.md](REVISION-2026-09-10.md) y [RUNBOOK.md](RUNBOOK.md). `AUDIT.md` es una auditoría histórica y no representa el estado actual.

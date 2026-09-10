@@ -4,65 +4,13 @@ service cloud.firestore {
 
     function signedIn()  {
       return request.auth != null
-          && request.auth.token.role in ['admin', 'tecnico'];
+          && request.auth.token.get('role', '') in ['admin', 'tecnico'];
     }
     function isAdmin()   { return signedIn() && request.auth.token.role == 'admin'; }
     function isTecnico() { return signedIn() && request.auth.token.role == 'tecnico'; }
     function locked(d)   { return d.status == 'completo' || d.status == 'firmado'; }
 
-    // #19 — El admin puede reabrir un doc bloqueado, pero SOLO como transición
-    // exacta a en_progreso tocando nada más que estos campos (no reedita
-    // contenido bloqueado en el mismo write).
-    //
-    // #P0-3 — El acta de conformidad FIRMADA queda fuera: la firma del cliente
-    // es el único acto con valor probatorio del protocolo y en esta versión es
-    // irreversible (firmado = definitivo). Los demás documentos conservan la
-    // reapertura, porque para ellos es un circuito previsto y necesario: una RF
-    // firmada como NO apta se corrige reabriéndola.
-    function isReopen(before, after, docType) {
-      return locked(before)
-          && !(docType == 'AC' && before.status == 'firmado')
-          && after.status == 'en_progreso'
-          && after.updatedBy == request.auth.uid
-          && after.reopenedBy == request.auth.uid
-          && after.updatedAt is int
-          && after.reopenedAt is int
-          && after.updatedAt >= before.updatedAt
-          && after.lockedSnapshot == null
-          && after.lockedAt == null
-          && after.lockedBy == null
-          && after.version == before.version + 1
-          && after.diff(before).affectedKeys().hasOnly([
-               'status', 'updatedAt', 'updatedBy', 'reopenedAt', 'reopenedBy',
-               'lockedSnapshot', 'lockedAt', 'lockedBy', 'version'
-             ]);
-    }
-
-    // #P0-3/#P0-4 — El acta solo se firma con una firma del cliente REAL.
-    //
-    // Sin la condición de `pending`, se podía firmar un acta cuya firma todavía
-    // estaba en la cola offline: una vez bloqueado el documento las reglas
-    // rechazan el `updateDoc` de `flushPhotoQueue()`, así que la referencia
-    // pendiente queda congelada para siempre y el acta se imprime sin firma.
-    //
-    // Sin la condición de path, un escritor directo podía apuntar la firma a un
-    // objeto guardado bajo OTRO docType del mismo proyecto (por ejemplo
-    // projects/<code>/FM/x.jpg). Ese documento sigue abierto, así que las
-    // Storage Rules dejarían sobrescribir el JPEG después de firmar: el
-    // lockedSnapshot seguiría apuntando al mismo path con otra imagen detrás.
-    //
-    // Solo se evalúa en la transición a 'firmado'; después el acta es inmutable.
-    function firmaClienteSubida(code, after, docType) {
-      return !(docType == 'AC' && after.status == 'firmado')
-          || (after.firmaCliente.firma is map
-              && after.firmaCliente.firma.get('pending', false) != true
-              && after.firmaCliente.firma.storagePath is string
-              && after.firmaCliente.firma.storagePath.split('/').size() == 4
-              && after.firmaCliente.firma.storagePath.split('/')[0] == 'projects'
-              && after.firmaCliente.firma.storagePath.split('/')[1] == code
-              && after.firmaCliente.firma.storagePath.split('/')[2] == 'AC');
-    }
-
+    // Cierre, reapertura, secuencia y snapshots se validan en la API autenticada.
     function validDocIdentity(before, after, code, docType) {
       return before.docType == docType
           && after.docType == docType
@@ -73,23 +21,32 @@ service cloud.firestore {
 
     function validNormalDocUpdate(before, after) {
       return !locked(before)
-          && after.status in ['vacio', 'en_progreso', 'completo', 'firmado']
+          && after.status in ['vacio', 'en_progreso']
           && after.updatedBy == request.auth.uid
           && after.updatedAt is int
-          && before.updatedAt is int
           && after.updatedAt >= before.updatedAt
-          && before.version is int
-          && after.version is int
-          && ((locked(after)
-                && after.version == before.version + 1
-                && after.lockedSnapshot is map
-                && after.lockedAt is int
-                && after.lockedBy == request.auth.uid)
-              || (!locked(after)
-                && after.version == before.version
-                && after.lockedSnapshot == before.lockedSnapshot
-                && after.lockedAt == before.lockedAt
-                && after.lockedBy == before.lockedBy));
+          && after.version == before.version
+          && after.lockedSnapshot == before.lockedSnapshot
+          && after.lockedAt == before.lockedAt
+          && after.lockedBy == before.lockedBy
+          && after.get('acceptedSnapshot', null) == before.get('acceptedSnapshot', null)
+          && after.get('remoteSign', null) == before.get('remoteSign', null);
+    }
+
+    // El servidor registra/descarta la firma y congela el contenido aceptado.
+    // La cola solo puede confirmar pending:true -> false de la misma referencia.
+    function clientSignatureUnchanged(before, after) {
+      let oldClient = before.get('firmaCliente', {});
+      let newClient = after.get('firmaCliente', {});
+      let oldPhoto = oldClient.get('firma', null);
+      let newPhoto = newClient.get('firma', null);
+      return (oldPhoto == null && newPhoto == null)
+          || (oldPhoto is map && newPhoto is map
+              && oldClient.diff(newClient).affectedKeys().hasOnly(['firma'])
+              && oldPhoto.diff(newPhoto).affectedKeys().hasOnly(['pending'])
+              && (newPhoto.get('pending', false) == oldPhoto.get('pending', false)
+                  || (oldPhoto.get('pending', false) == true && newPhoto.get('pending', false) == false))
+              && after.diff(before).affectedKeys().hasOnly(['firmaCliente', 'firmaCotaCero', 'updatedAt', 'updatedBy']));
     }
 
     // #7 — Valida que todos los valores del mapa docStatus estén en el enum.
@@ -121,22 +78,11 @@ service cloud.firestore {
                .data.status == 'firmado';
     }
 
-    // #docStatus-source-of-truth — documents/{docType}.status es la única
-    // fuente de verdad; docStatus es un mirror que solo puede recibir un valor
-    // para un slot si (a) no cambia respecto del valor previo, o (b) coincide
-    // con el status real del documento correspondiente. `get()` solo se evalúa
-    // si el slot realmente cambió (cortocircuito de `||`), así que el costo
-    // típico es 1 lectura extra (el docType que se está cerrando/reabriendo),
-    // igual que el resto de los chequeos cross-documento de este archivo.
-    //
-    // Nota de diseño: esto exige que el documento real ya esté commiteado
-    // ANTES de que se escriba el mirror — un mismo batch no sirve, porque
-    // get() dentro de una regla no ve las escrituras hermanas de su propio
-    // batch. lib/repo/projects.ts (setDocStatus/reopenDoc) escribe el
-    // documento real primero y el mirror después, en un segundo paso.
+    // El espejo debe coincidir con el documento real. getAfter admite
+    // la promoción inicial y su espejo dentro del mismo batch offline.
     function docStatusSlotCoherent(code, dt, before, after) {
       return after[dt] == before[dt]
-          || after[dt] == get(/databases/$(db)/documents/projects/$(code)/documents/$(dt))
+          || after[dt] == getAfter(/databases/$(db)/documents/projects/$(code)/documents/$(dt))
                             .data.status;
     }
     function docStatusCoherent(code, before, after) {
@@ -148,38 +94,12 @@ service cloud.firestore {
           && docStatusSlotCoherent(code, 'FM', before, after);
     }
 
-    // #21 — Documento anterior en el protocolo VT→EP→OT→RF→AC→FM.
-    function prevDocType(dt) {
-      return dt == 'EP' ? 'VT'
-           : dt == 'OT' ? 'EP'
-           : dt == 'RF' ? 'OT'
-           : dt == 'AC' ? 'RF'
-           : dt == 'FM' ? 'AC'
-           : '';   // VT no tiene anterior.
-    }
-    function docCerrado(code, dt) {
-      return get(/databases/$(db)/documents/projects/$(code)/documents/$(dt))
-               .data.status in ['completo','firmado'];
-    }
-    function rfApto(code) {
-      return get(/databases/$(db)/documents/projects/$(code)/documents/RF)
-               .data.aptoEntrega == true;
-    }
     // Un proyecto archivado es de solo lectura: ninguna escritura en sus
     // documentos (para editar hay que desarchivarlo primero). Cuesta 1 lectura
     // por escritura de documento; aceptable para uso interno.
     function projectArchived(code) {
       return get(/databases/$(db)/documents/projects/$(code))
                .data.status == 'archivado';
-    }
-
-    // #21 — Un documento solo se cierra (completo/firmado) si el anterior del
-    // protocolo ya está cerrado; el acta (AC) además exige RF apto para entrega.
-    // Solo cuesta lecturas extra al cerrar, no en cada autosave.
-    function secuenciaOk(code, docType, newStatus) {
-      return !(newStatus in ['completo','firmado'])
-          || ((docType == 'VT' || docCerrado(code, prevDocType(docType)))
-              && (docType != 'AC' || rfApto(code)));
     }
 
     match /clients/{clientId} {
@@ -266,38 +186,16 @@ service cloud.firestore {
         allow create, delete: if false;
         allow update: if !projectArchived(code)
                       && validDocIdentity(resource.data, request.resource.data, code, docType)
-                      && firmaClienteSubida(code, request.resource.data, docType)
-                      && ((isAdmin()
-                           && (isReopen(resource.data, request.resource.data, docType)
-                               || (validNormalDocUpdate(resource.data, request.resource.data)
-                                   && secuenciaOk(code, docType,
-                                                  request.resource.data.status))))
-                          || (isTecnico()
-                           && docType in ['VT', 'EP', 'OT', 'RF']
-                           && validNormalDocUpdate(resource.data, request.resource.data)
-                           && secuenciaOk(code, docType, request.resource.data.status)));
+                      && validNormalDocUpdate(resource.data, request.resource.data)
+                      && (docType != 'AC' || clientSignatureUnchanged(resource.data, request.resource.data))
+                      && (isAdmin() || (isTecnico() && docType in ['VT', 'EP', 'OT', 'RF']));
       }
 
       match /revisions/{rev} {
         allow read:           if signedIn();
         // #10 — by debe ser el uid del autor; at debe ser el timestamp del servidor.
-        allow create:         if signedIn()
-                                 && request.resource.data.keys().hasAll([
-                                      'docType', 'projectCode', 'action', 'snapshot',
-                                      'version', 'by', 'at'
-                                    ])
-                                 && request.resource.data.keys().hasOnly([
-                                      'docType', 'projectCode', 'action', 'snapshot',
-                                      'version', 'by', 'at'
-                                    ])
-                                 && request.resource.data.docType in ['VT','EP','OT','RF','AC','FM']
-                                 && request.resource.data.projectCode == code
-                                 && request.resource.data.action in ['vacio','en_progreso','completo','firmado']
-                                 && request.resource.data.snapshot is map
-                                 && request.resource.data.version is int
-                                 && request.resource.data.version >= 0
-                                 && request.resource.data.by == request.auth.uid
-                                 && request.resource.data.at == request.time;
+        // Solo el servidor escribe revisiones en la transacción de la acción.
+        allow create: if false;
         allow update, delete: if false;
       }
     }

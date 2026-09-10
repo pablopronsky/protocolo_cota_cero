@@ -34,6 +34,16 @@ function resolvePrivateKey(raw: string | undefined, b64: string | undefined): st
 
 function getAdminApp(): App {
   if (getApps().length === 0) {
+    if (process.env.NEXT_PUBLIC_FIREBASE_USE_EMULATORS === '1') {
+      if (process.env.VERCEL || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID !== 'cotacero-test'
+        || process.env.FIRESTORE_EMULATOR_HOST !== '127.0.0.1:18080'
+        || process.env.FIREBASE_AUTH_EMULATOR_HOST !== '127.0.0.1:19099'
+        || process.env.FIREBASE_STORAGE_EMULATOR_HOST !== '127.0.0.1:19199') {
+        throw new Error('Configuración de emuladores inválida.');
+      }
+      adminApp = initializeApp({ projectId: 'cotacero-test', storageBucket: 'cotacero-test.appspot.com' });
+      return adminApp;
+    }
     const env = getServerEnv();
     adminApp = initializeApp({
       credential: cert({

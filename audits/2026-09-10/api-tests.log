@@ -1,0 +1,16 @@
+
+> cotacero@0.1.0 test:api
+> vitest run tests/api
+
+
+ RUN  v3.2.6 G:/Cota Cero protocolo/cotacero
+
+(node:8788) MetadataLookupWarning: received unexpected error = All promises were rejected code = UNKNOWN
+(Use `node --trace-warnings ...` to show where the warning was created)
+ ✓ tests/api/sign.test.ts (20 tests) 6145ms
+   ✓ POST /api/sign/request — no emite links para obras que no corresponden > emite el link con la obra lista  3298ms
+
+ Test Files  1 passed (1)
+      Tests  20 passed (20)
+   Start at  00:53:01
+   Duration  8.28s (transform 119ms, setup 0ms, collect 1.83s, tests 6.15s, environment 0ms, prepare 121ms)

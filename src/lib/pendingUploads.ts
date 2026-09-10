@@ -42,7 +42,10 @@ export function collectPhotoRefs(value: unknown): PhotoRef[] {
       if (!found.has(node.id)) found.set(node.id, node);
       return;
     }
-    Object.values(node as Record<string, unknown>).forEach(walk);
+    // El contexto aceptado es histórico: sus refs pending no representan la cola actual.
+    Object.entries(node as Record<string, unknown>).forEach(([key, value]) => {
+      if (key !== 'acceptedSnapshot') walk(value);
+    });
   };
 
   walk(value);

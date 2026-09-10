@@ -1,7 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { subscribeProject, getAllDocs } from '@/lib/repo/projects';
+import { subscribeProject } from '@/lib/repo/projects';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { getFirebaseDb } from '@/lib/firebase/client';
+import { documentAction } from '@/lib/documentApi';
+import { documentStatuses, effectiveProjectStatus } from '@/lib/projectState';
 import type { Project, ProjectCode, DocType, AnyDoc } from '@/schemas';
 
 function errorMessage(reason: unknown, fallback: string): string {
@@ -46,24 +50,45 @@ export function useProject(code: ProjectCode) {
       },
     );
 
-    void getAllDocs(code)
-      .then((nextDocs) => {
-        if (active) setDocs(nextDocs);
-      })
-      .catch((reason: unknown) => {
-        if (active) setError(errorMessage(reason, 'No se pudo cargar el legajo del proyecto.'));
-      })
-      .finally(() => {
-        if (active) setDocsLoading(false);
-      });
+    const unsubscribeDocs = onSnapshot(collection(getFirebaseDb(), 'projects', code, 'documents'), (snap) => {
+      if (!active) return;
+      const next: Partial<Record<DocType, AnyDoc>> = {};
+      snap.forEach(d => { next[d.id as DocType] = d.data() as AnyDoc; });
+      setDocs(next);
+      setDocsLoading(false);
+    }, reason => {
+      if (!active) return;
+      setError(errorMessage(reason, 'No se pudo cargar el legajo.'));
+      setDocsLoading(false);
+    });
 
     return () => {
       active = false;
       unsubscribe();
+      unsubscribeDocs();
     };
   }, [code]);
 
+  useEffect(() => {
+    if (!project || projectLoading || docsLoading) return;
+    const expected = documentStatuses(docs);
+    const status = effectiveProjectStatus(docs, project.status === 'archivado');
+    if (JSON.stringify(expected) === JSON.stringify(project.docStatus) && status === project.status) return;
+    const repair = () => { void documentAction({ action: 'reconcile', projectCode: code }).catch(() => {
+      // Las vistas ya usan los documentos reales; reintentar en la próxima conexión.
+    }); };
+    repair();
+    window.addEventListener('online', repair);
+    const timer = setInterval(repair, 30_000);
+    return () => { window.removeEventListener('online', repair); clearInterval(timer); };
+  }, [code, project, docs, projectLoading, docsLoading]);
+
+  const currentProject = project && !docsLoading ? {
+    ...project, docStatus: documentStatuses(docs),
+    status: effectiveProjectStatus(docs, project.status === 'archivado'),
+  } : project;
+
   // El formulario no se monta hasta tener proyecto y documentos. Esto evita
   // que RHF arranque vacío y un reset tardío borre datos que el usuario tipeó.
-  return { project, docs, loading: projectLoading || docsLoading, error };
+  return { project: currentProject, docs, loading: projectLoading || docsLoading, error };
 }

@@ -22,7 +22,7 @@ beforeAll(async () => {
     firestore: {
       rules: readFileSync(resolve(__dirname, '../../firestore.rules'), 'utf8'),
       host: '127.0.0.1',
-      port: 8080,
+      port: 18080,
     },
   });
 }, 30_000);
@@ -490,10 +490,10 @@ describe('Document access control', () => {
   // reopen (→ en_progreso, tocando solo los campos del batch), y solo admin.
   // #P0-3 — El acta FIRMADA quedó fuera de esa salida (ver bloque dedicado más
   // abajo); una RF firmada sí se reabre, es el circuito de corrección de obra.
-  it('admin can reopen a firmado doc (exact transition)', async () => {
+  it('SDK directo rechazado: admin can reopen a firmado doc (exact transition)', async () => {
     await seedProject('P-2025-001', BASE_PROJECT);
     await seedDoc('P-2025-001', 'RF', { status: 'firmado' });
-    await assertSucceeds(
+    await assertFails(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'RF'),
         {
@@ -505,10 +505,10 @@ describe('Document access control', () => {
     );
   });
 
-  it('admin can reopen an AC that is completo but not signed', async () => {
+  it('SDK directo rechazado: admin can reopen an AC that is completo but not signed', async () => {
     await seedProject('P-2025-001', BASE_PROJECT);
     await seedDoc('P-2025-001', 'AC', { status: 'completo' });
-    await assertSucceeds(
+    await assertFails(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'AC'),
         {
@@ -617,11 +617,11 @@ describe('Sequencing enforcement', () => {
     );
   });
 
-  it('can close EP when VT is closed', async () => {
+  it('SDK directo rechazado: can close EP when VT is closed', async () => {
     await seedProject('P-2025-001', BASE_PROJECT);
     await seedDoc('P-2025-001', 'VT', { status: 'completo' });
     await seedDoc('P-2025-001', 'EP', { status: 'en_progreso' });
-    await assertSucceeds(
+    await assertFails(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'EP'),
         {
@@ -632,10 +632,10 @@ describe('Sequencing enforcement', () => {
     );
   });
 
-  it('can close VT without any prerequisite', async () => {
+  it('SDK directo rechazado: can close VT without any prerequisite', async () => {
     await seedProject('P-2025-001', BASE_PROJECT);
     await seedDoc('P-2025-001', 'VT', { status: 'en_progreso' });
-    await assertSucceeds(
+    await assertFails(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'VT'),
         {
@@ -661,11 +661,11 @@ describe('Sequencing enforcement', () => {
     );
   });
 
-  it('can sign AC when RF is apto para entrega', async () => {
+  it('SDK directo rechazado: can sign AC when RF is apto para entrega', async () => {
     await seedProject('P-2025-001', BASE_PROJECT);
     await seedDoc('P-2025-001', 'RF', { status: 'completo', aptoEntrega: true });
     await seedDoc('P-2025-001', 'AC', { status: 'en_progreso' });
-    await assertSucceeds(
+    await assertFails(
       updateDoc(
         doc(admin(), 'projects', 'P-2025-001', 'documents', 'AC'),
         {
@@ -710,8 +710,8 @@ describe('Revisions append-only', () => {
     at: serverTimestamp(),
   };
 
-  it('signed-in user can create a well-formed revision', async () => {
-    await assertSucceeds(
+  it('SDK directo rechazado: signed-in user can create a well-formed revision', async () => {
+    await assertFails(
       addDoc(collection(tecnico(), 'projects', 'P-2025-001', 'revisions'), validRevision),
     );
   });
@@ -922,9 +922,9 @@ describe('AC firmada es inmutable (P0-3)', () => {
     );
   });
 
-  it('4 · el flujo normal de firma sigue permitido (en_progreso → firmado)', async () => {
+  it('4 · el cierre de firma exige el servidor', async () => {
     await seedActaEnProgreso();
-    await assertSucceeds(updateDoc(acRef(admin()), firmarCon(FIRMA_SUBIDA)));
+    await assertFails(updateDoc(acRef(admin()), firmarCon(FIRMA_SUBIDA)));
   });
 
   // ── Intentos de evasión ─────────────────────────────────────────
@@ -1059,21 +1059,45 @@ describe('el acta no se firma sin una firma del cliente real (P0-3/P0-4)', () =>
     })));
   });
 
-  it('sí se puede firmar con una firma subida bajo el path del acta', async () => {
+  it('SDK directo rechazado: sí se puede firmar con una firma subida bajo el path del acta', async () => {
     await seedActaEnProgreso();
-    await assertSucceeds(updateDoc(acRef(admin()), firmarCon({
+    await assertFails(updateDoc(acRef(admin()), firmarCon({
       id: 'f1', storagePath: `projects/${CODE}/AC/f1.jpg`,
       takenAt: 1400, uploadedBy: 'admin-uid', pending: false,
     })));
   });
 
-  it('cerrar el acta como "completo" no exige firma (todavía no es evidencia)', async () => {
+  it('SDK directo rechazado: cerrar el acta como "completo" no exige firma (todavía no es evidencia)', async () => {
     await seedActaEnProgreso();
-    await assertSucceeds(updateDoc(acRef(admin()), {
+    await assertFails(updateDoc(acRef(admin()), {
       status: 'completo', conformidad: 'conforme', version: 1,
       lockedSnapshot: { conformidad: 'conforme' },
       lockedAt: 2000, lockedBy: 'admin-uid',
       updatedAt: 2000, updatedBy: 'admin-uid',
     }));
+  });
+});
+
+
+describe('firma capturada: integridad antes del cierre administrativo', () => {
+  const code = 'COTA-2026-9801';
+  async function seedAccepted() {
+    await seedProject(code, { ...BASE_PROJECT, code, status: 'en_curso' });
+    await seedDoc(code, 'AC', { status: 'en_progreso', conformidad: 'conforme', acceptedSnapshot: { conformidad: 'conforme' },
+      firmaCliente: { nombreAclaratorio: 'Cliente', dni: '30111222', firma: { id: 's1', storagePath: `projects/${code}/AC/s1.jpg`, pending: true } } });
+  }
+  it('deniega cambiar contenido conservando la firma', async () => {
+    await seedAccepted(); await assertFails(updateDoc(doc(admin(), 'projects', code, 'documents', 'AC'), { conformidad: 'no_conforme', updatedAt: 2000 }));
+  });
+  it('permite confirmar la subida de la misma firma y luego no permite volver a pendiente', async () => {
+    await seedAccepted(); const ref = doc(admin(), 'projects', code, 'documents', 'AC');
+    await assertSucceeds(updateDoc(ref, { 'firmaCliente.firma.pending': false, updatedAt: 2000 }));
+    await assertFails(updateDoc(ref, { 'firmaCliente.firma.pending': true, updatedAt: 3000 }));
+  });
+  it('deniega reemplazar o quitar una firma directamente y falsificar el contexto aceptado', async () => {
+    await seedAccepted(); const ref = doc(admin(), 'projects', code, 'documents', 'AC');
+    await assertFails(updateDoc(ref, { 'firmaCliente.firma': null, updatedAt: 2000 }));
+    await assertFails(updateDoc(ref, { 'firmaCliente.firma.id': 'otro', updatedAt: 2000 }));
+    await assertFails(updateDoc(ref, { acceptedSnapshot: { conformidad: 'otro' }, updatedAt: 2000 }));
   });
 });

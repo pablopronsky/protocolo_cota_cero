@@ -7,7 +7,7 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     // Playwright specs have their own runner and must never be collected by Vitest.
-    exclude: [...configDefaults.exclude, 'tests/e2e/**'],
+    exclude: [...configDefaults.exclude, 'tests/e2e/**', 'tests/browser/**'],
     // Give the Firebase emulator time to respond on first connect.
     hookTimeout: 30_000,
     testTimeout: 30_000,

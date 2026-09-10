@@ -25,9 +25,9 @@ export function sequencingError(
   if (!isLocked(target)) return null;
 
   const i = DOC_ORDER.indexOf(docType);
-  if (i > 0) {
-    const prev = DOC_ORDER[i - 1];
-    if (!isLocked(docStatus[prev])) {
+  for (const prev of DOC_ORDER.slice(0, i)) {
+    const actualStatus = upstream ? upstream[prev]?.status : docStatus[prev];
+    if (!isLocked(actualStatus)) {
       return `Completá ${prev} · ${DOC_LABELS[prev]} antes de cerrar ${docType}.`;
     }
   }

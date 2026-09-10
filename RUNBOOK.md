@@ -1,3 +1,5 @@
+> Comprobación de solo lectura del 2026-09-10: Firestore `cota-cero-protocolo`, región `southamerica-east1`, PITR **desactivado**, retención informada **3600 segundos**, protección de borrado desactivada. La API de backups y de programaciones respondió **403** con la cuenta disponible. No se verificó un ensayo de restauración. No presentar los procedimientos de este documento como un respaldo existente o probado. Habilitar/configurar recuperación y ejecutar un ensayo requiere una cuenta con permisos operativos adecuados.
+
 # COTA CERO — Runbook de recuperación de datos
 
 *Audience: administrador de la cuenta Firebase (pablopronsky@gmail.com)*

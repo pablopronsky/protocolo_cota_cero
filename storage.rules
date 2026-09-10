@@ -3,7 +3,7 @@ service firebase.storage {
   match /b/{bucket}/o {
     function hasAppRole() {
       return request.auth != null
-          && request.auth.token.role in ['admin', 'tecnico'];
+          && request.auth.token.get('role', '') in ['admin', 'tecnico'];
     }
 
     function canWriteDoc(docType) {
@@ -62,6 +62,17 @@ service firebase.storage {
           && firestore.get(docPath(code, 'AC')).data.status == 'firmado';
     }
 
+    function signaturePendingOrDifferent(code, fileName) {
+      let data = firestore.get(docPath(code, 'AC')).data;
+      let signature = data.get('firmaCliente', {}).get('firma', {});
+      return signature.get('storagePath', '') != 'projects/' + code + '/AC/' + fileName
+          || signature.get('pending', false) == true;
+    }
+
+    function clientSignatureMutable(code, docType, fileName) {
+      return docType != 'AC' || !firestore.exists(docPath(code, 'AC')) || signaturePendingOrDifferent(code, fileName);
+    }
+
     match /projects/{code}/{docType}/{fileName} {
       allow read: if hasAppRole()
                   && validPath(code, docType, fileName);
@@ -73,7 +84,8 @@ service firebase.storage {
                     && validPath(code, docType, fileName)
                     && validUpload()
                     && docIsOpen(code, docType)
-                    && !actaFirmada(code);
+                    && !actaFirmada(code)
+                    && clientSignatureMutable(code, docType, fileName);
 
       // Sobrescritura: la app nunca reutiliza un path (cada captura es un UUID
       // nuevo), pero `flushPhotoQueue()` puede reintentar una subida cuyo
@@ -84,7 +96,8 @@ service firebase.storage {
                     && validPath(code, docType, fileName)
                     && validUpload()
                     && docIsOpen(code, docType)
-                    && !actaFirmada(code);
+                    && !actaFirmada(code)
+                    && clientSignatureMutable(code, docType, fileName);
 
       // La aplicación nunca borra objetos de Storage: `removePhotoFromDoc()`
       // solo quita la referencia en Firestore. Denegar el delete por completo

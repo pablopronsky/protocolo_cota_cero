@@ -8,7 +8,12 @@ const securityHeaders = [
   { key: 'Permissions-Policy',         value: 'camera=(), microphone=(), geolocation=()' },
 ];
 
+if (process.env.VERCEL && process.env.NEXT_PUBLIC_FIREBASE_USE_EMULATORS === '1') {
+  throw new Error('No se permite desplegar una build de emuladores.');
+}
+
 const nextConfig: NextConfig = {
+  distDir: process.env.NEXT_PUBLIC_FIREBASE_USE_EMULATORS === '1' ? '.next-test' : '.next',
   turbopack: {},
   // google-gax (usado por firebase-admin/firestore) carga sus .proto a runtime
   // con paths dinámicos, que el file tracer de Next no detecta. Sin esto, el

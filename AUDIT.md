@@ -1,3 +1,5 @@
+> Documento histórico. Para el estado de 2.6.7, ver REVISION-2026-09-10.md y CHANGELOG.md.
+
 # 🏛️ COTA CERO — CONSOLIDATED ENGINEERING AUDIT
 *Orchestrated multi-agent review · 6 specialists + red-team verification · 2026-06-29*
 *Scope: full repo (72 tracked files, ~7,640 LOC src). Next.js 16.2.9 · React 19.2 · Firebase · TS strict.*

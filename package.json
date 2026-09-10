@@ -1,6 +1,6 @@
 {
   "name": "cotacero",
-  "version": "0.1.0",
+  "version": "2.6.7",
   "private": true,
   "engines": {
     "node": "22.x"
@@ -15,11 +15,13 @@
     "test:unit": "vitest run tests/unit",
     "test:rules": "vitest run tests/rules",
     "test:api": "vitest run tests/api",
-    "test:rules:emu": "firebase emulators:exec --only firestore,storage --project cotacero-test \"npm run test:rules && npm run test:api\"",
+    "test:rules:emu": "firebase emulators:exec --config firebase.test.json --only firestore,storage --project cotacero-test \"npm run test:rules && npm run test:api\"",
     "test:e2e": "playwright test",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:image": "playwright test -c playwright.image.config.ts"
+    "test:image": "playwright test -c playwright.image.config.ts",
+    "test:e2e:isolated": "node scripts/test-e2e.mjs",
+    "test:all:emu": "firebase emulators:exec --config firebase.test.json --only firestore,storage,auth --project cotacero-test \"npm test && npm run test:image && npm run test:e2e:isolated\""
   },
   "dependencies": {
     "@hookform/resolvers": "^5.4.0",

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { omitStatus } from '@/lib/docPatch';
+import { omitStatus, editableDocPatch } from '@/lib/docPatch';
 
 describe('omitStatus', () => {
   it('quita status del patch, sin tocar el resto de los campos', () => {
@@ -22,4 +22,10 @@ describe('omitStatus', () => {
     expect(sanitized).not.toHaveProperty('status');
     expect(sanitized).toEqual({ observaciones: 'nueva nota' });
   });
+});
+
+
+it('un formulario viejo no reenvia autor, version, cierre ni snapshot al guardar', () => {
+  expect(editableDocPatch({ status: 'firmado', updatedBy: 'otro', version: 1, lockedSnapshot: {}, lockedBy: 'otro', createdAt: 1,
+    acceptedSnapshot: {}, remoteSign: {}, observaciones: 'edicion nueva' } as never)).toEqual({ observaciones: 'edicion nueva' });
 });

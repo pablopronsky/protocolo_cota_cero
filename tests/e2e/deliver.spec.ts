@@ -1,115 +1,24 @@
-/**
- * E2E: Deliver (entregar) flow
- *
- * Tests that:
- *  - Entregable PDF is available without requiring AC signature
- *  - Project status can be advanced to "entregado"
- *  - WhatsApp / share button becomes visible
- *
- * Requires same setup as signoff.spec.ts
- */
 import { test, expect } from '@playwright/test';
-import { getTestDb, signInAsAdmin, seedTestProject, advanceToReadyForSignoff } from './helpers/setup';
-import { doc, setDoc } from 'firebase/firestore';
-
-const TEST_PROJECT = 'P-E2E-DELIVER';
-
-async function seedProjectWithoutSignedAc(projectCode: string) {
-  await seedTestProject(projectCode);
-  await advanceToReadyForSignoff(projectCode);
-
-  // Keep the AC in progress: the client deliverable must not require a signature.
-  const db = getTestDb();
-  await setDoc(
-    doc(db, 'projects', projectCode, 'documents', 'AC'),
-    {
-      docType: 'AC',
-      projectCode,
-      status: 'en_progreso',
-      lockedSnapshot: { fechaActa: '2025-01-20', conformidad: 'conforme' },
-      lockedAt: Date.now(),
-      lockedBy: 'admin-uid',
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      updatedBy: 'admin-uid',
-      version: 2,
-      fechaActa: '2025-01-20',
-      conformidad: 'conforme',
-      observacionesCliente: '',
-      firmaCliente: { nombreAclaratorio: 'María García', dni: '30123456', firma: null },
-      firmaCotaCero: { uid: 'admin-uid', firma: null },
-    },
-  );
-
-  await setDoc(
-    doc(db, 'projects', projectCode),
-    {
-      status: 'en_curso',
-      docStatus: {
-        VT: 'completo', EP: 'completo', OT: 'completo',
-        RF: 'completo', AC: 'en_progreso', FM: 'vacio',
-      },
-      updatedAt: Date.now(),
-      updatedBy: 'admin-uid',
-    },
-    { merge: true },
-  );
-}
-
-async function markAcSigned(projectCode: string) {
-  const db = getTestDb();
-  await setDoc(
-    doc(db, 'projects', projectCode, 'documents', 'AC'),
-    { status: 'firmado' },
-    { merge: true },
-  );
-  await setDoc(
-    doc(db, 'projects', projectCode),
-    { docStatus: { AC: 'firmado' } },
-    { merge: true },
-  );
-}
-
-test.describe('Deliver (entregar) flow', () => {
-  test.beforeEach(async ({ page }) => {
-    await seedProjectWithoutSignedAc(TEST_PROJECT);
-    await signInAsAdmin(page);
+import { db, seed, signIn } from './helpers/setup';
+const CODE = 'COTA-2026-9902';
+test.describe('entregable y archivo', () => {
+  test.beforeEach(async ({ page }) => { await seed(CODE); await signIn(page); });
+  test('un acta sin firma se imprime como borrador', async ({ page }) => {
+    await page.goto(`/print/${CODE}/entregable`);
+    await expect(page.getByText('BORRADOR — NO VÁLIDO PARA ENTREGA').first()).toBeVisible();
+    await expect(page.getByText('Cliente E2E').first()).toBeVisible();
   });
-
-  test('entregable PDF option is visible without AC signature', async ({ page }) => {
-    await page.goto(`/projects/${TEST_PROJECT}`);
-    // The PrintEntregable or share button should be visible
-    const entregableButton = page.getByRole('link', { name: /entregable|pdf/i })
-      .or(page.getByRole('button', { name: /entregable|compartir/i }));
-    await expect(entregableButton.first()).toBeVisible({ timeout: 10_000 });
+  test('un codigo inexistente termina mostrando el error', async ({ page }) => {
+    await page.goto('/projects/COTA-2026-9999');
+    await expect(page.getByText('Proyecto no encontrado.')).toBeVisible();
   });
-
-  test('entregable PDF renders without a signed AC', async ({ page }) => {
-    // Navigate to the entregable print URL if it exists
-    await page.goto(`/projects/${TEST_PROJECT}/print/entregable`);
-    // Should show the entered acta content even without a signature.
-    await expect(page.getByText(/conforme/i)).toBeVisible({ timeout: 10_000 });
-    // Should NOT show the raw "vacio" placeholder
-    await expect(page.getByText(/vacio/i)).not.toBeVisible();
-  });
-
-  test('admin can mark project as entregado after firmado AC', async ({ page }) => {
-    await markAcSigned(TEST_PROJECT);
-    await page.goto(`/projects/${TEST_PROJECT}`);
-    const entregarButton = page.getByRole('button', { name: /entregar|marcar entregado/i });
-    if (await entregarButton.isVisible({ timeout: 5_000 })) {
-      await entregarButton.click();
-      // Confirm dialog if present
-      const confirmButton = page.getByRole('button', { name: /confirmar|aceptar|sí/i });
-      if (await confirmButton.isVisible({ timeout: 3_000 })) {
-        await confirmButton.click();
-      }
-      await expect(page.getByText(/entregado/i)).toBeVisible({ timeout: 10_000 });
-    } else {
-      test.info().annotations.push({
-        type: 'note',
-        description: 'Entregar button not found — may require project status flow update in UI',
-      });
-    }
+  test('archivar y desarchivar recupera una obra entregada', async ({ page }) => {
+    await db.doc(`projects/${CODE}/documents/AC`).update({ status: 'firmado' });
+    await page.goto(`/projects/${CODE}`);
+    await page.getByRole('button', { name: /^Archivar/ }).click();
+    await page.getByRole('dialog').getByRole('button', { name: /confirmar/i }).click();
+    await expect.poll(async () => (await db.doc(`projects/${CODE}`).get()).data()?.status).toBe('archivado');
+    await page.getByRole('button', { name: /Desarchivar/ }).click();
+    await expect.poll(async () => (await db.doc(`projects/${CODE}`).get()).data()?.status).toBe('entregado');
   });
 });

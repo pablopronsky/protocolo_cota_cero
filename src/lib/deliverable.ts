@@ -28,6 +28,9 @@ export function evaluateDeliverable(
   documents: Partial<Record<DocType, AnyDoc>>,
 ): DeliverableGate {
   const reasons: string[] = [];
+  for (const type of ['VT', 'EP', 'OT'] as const) {
+    if (!isClosed(documents[type]?.status)) reasons.push(`El documento ${type} debe estar cerrado.`);
+  }
 
   const rf = documents.RF as DocRF | undefined;
   if (!rf) {

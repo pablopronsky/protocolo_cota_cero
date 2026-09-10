@@ -12,6 +12,9 @@ import { IDBFactory } from 'fake-indexeddb';
 
 const uploadBytes = vi.fn();
 const updateDoc = vi.fn();
+const getDoc = vi.fn();
+const documentAction = vi.fn();
+vi.mock('@/lib/documentApi', () => ({ documentAction: (...args: unknown[]) => documentAction(...args) }));
 
 vi.mock('firebase/storage', () => ({
   ref: (_s: unknown, path: string) => ({ path }),
@@ -20,6 +23,7 @@ vi.mock('firebase/storage', () => ({
 }));
 
 vi.mock('firebase/firestore', () => ({
+  getDoc: (...args: unknown[]) => getDoc(...args),
   doc: (_db: unknown, ...segments: string[]) => ({ path: segments.join('/') }),
   updateDoc: (...args: unknown[]) => updateDoc(...args),
   arrayUnion: (v: unknown) => ({ __op: 'arrayUnion', v }),
@@ -41,7 +45,7 @@ vi.mock('@/lib/imageNormalize', async (importOriginal) => {
 });
 
 import {
-  enqueuePhoto,
+  enqueuePhoto, enqueueSignature,
   flushPhotoQueue,
   retryPhotoUpload,
   getPhotoQueueSnapshot,
@@ -70,6 +74,8 @@ beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
   uploadBytes.mockReset().mockResolvedValue(undefined);
   updateDoc.mockReset().mockResolvedValue(undefined);
+  getDoc.mockReset().mockResolvedValue({ data: () => ({ firmaCliente: { firma: { pending: true } } }) });
+  documentAction.mockReset().mockResolvedValue(undefined);
   normalizeImage.mockReset().mockImplementation(async () => jpeg());
   setOnline(true);
   vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -489,5 +495,32 @@ describe('captura offline', () => {
     expect((await getPhotoQueueSnapshot()).size).toBe(1);
     expect([...(await getPhotoQueueSnapshot()).values()][0].state).toBe('pending');
     expect(uploadBytes).not.toHaveBeenCalled();
+  });
+});
+
+
+describe('firma y contenido en la misma entrada offline', () => {
+  it('sincroniza el contenido aceptado antes de subir los bytes', async () => {
+    setOnline(false);
+    const file = new File([new Uint8Array([1])], 'firma.jpg', { type: 'image/jpeg' });
+    await enqueueSignature(CODE, 'firmaCliente.firma', file, 'tec-uid', { conformidad: 'conforme', observacionesCliente: 'original' });
+    expect(documentAction).not.toHaveBeenCalled();
+    await flushPhotoQueue();
+    expect(documentAction).toHaveBeenCalledWith(expect.objectContaining({ action: 'capture-signature', values: { conformidad: 'conforme', observacionesCliente: 'original' } }));
+    expect(documentAction.mock.invocationCallOrder[0]).toBeLessThan(uploadBytes.mock.invocationCallOrder[0]);
+    expect(await getPhotoQueueSnapshot()).toHaveProperty('size', 0);
+  });
+  it('un reintento despues del ACK perdido no sobrescribe una firma ya subida', async () => {
+    setOnline(false); getDoc.mockResolvedValue({ data: () => ({ firmaCliente: { firma: { pending: false } } }) });
+    await enqueueSignature(CODE, 'firmaCliente.firma', new File([new Uint8Array([1])], 'firma.jpg'), 'tec-uid', {});
+    await flushPhotoQueue();
+    expect(uploadBytes).not.toHaveBeenCalled();
+    expect(await getPhotoQueueSnapshot()).toHaveProperty('size', 0);
+  });
+  it('un rechazo del registro de firma no sube un objeto huerfano', async () => {
+    setOnline(false); documentAction.mockRejectedValue(fbError('permission-denied'));
+    await enqueueSignature(CODE, 'firmaCliente.firma', new File([new Uint8Array([1])], 'firma.jpg'), 'tec-uid', {});
+    setOnline(true); await flushPhotoQueue(); expect(uploadBytes).not.toHaveBeenCalled();
+    expect([...await getPhotoQueueSnapshot()].map(([,value]) => value.state)).toEqual(['error']);
   });
 });

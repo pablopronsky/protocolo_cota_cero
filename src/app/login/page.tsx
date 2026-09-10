@@ -1,5 +1,7 @@
 'use client';
 
+import { APP_VERSION } from '@/lib/version';
+
 import { useState, FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { setPersistence, browserLocalPersistence, browserSessionPersistence, sendPasswordResetEmail } from 'firebase/auth';
@@ -577,7 +579,7 @@ export default function LoginPage() {
               <span style={{
                 fontSize: 10, color: 'rgba(184,174,163,0.32)',
                 letterSpacing: '0.08em', fontFamily: 'monospace',
-              }}>v2.6.6</span>
+              }}>v{APP_VERSION}</span>
               <div style={{ width: 1, height: 10, background: 'rgba(195,138,90,0.28)', flexShrink: 0 }} />
               <span style={{
                 fontSize: 9, fontWeight: 700, letterSpacing: '0.14em',

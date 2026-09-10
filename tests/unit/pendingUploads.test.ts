@@ -134,3 +134,9 @@ describe('cierre de documento con adjuntos fallados', () => {
     expect(pendingUploadsError(clean, new Map())).toBeNull();
   });
 });
+
+
+it('el contexto historico de firma no vuelve pendiente una firma ya subida', () => {
+  expect(pendingUploadsError({ acceptedSnapshot: { firma: { id: 's1', storagePath: 'projects/test/AC/s1.jpg', pending: true } },
+    firmaCliente: { firma: { id: 's1', storagePath: 'projects/test/AC/s1.jpg', pending: false } } })).toBeNull();
+});
